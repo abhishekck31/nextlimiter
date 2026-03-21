@@ -14,6 +14,9 @@ const { SmartDetector }           = require('../smart/detector');
 const { setHeaders }              = require('../middleware/headers');
 const { checkAccess }             = require('./accessControl');
 const { PrometheusFormatter }     = require('../analytics/prometheus');
+const { RuleEngine }              = require('./ruleEngine');
+const { WebhookSender }           = require('../webhook/sender');
+const { Scheduler }               = require('./scheduler');
 
 const STRATEGY_MAP = {
   'fixed-window':   fixedWindowCheck,
@@ -77,6 +80,11 @@ class Limiter extends EventEmitter {
         this.emit('stats', this.getStats());
       }, this._config.statsInterval).unref();
     }
+
+    // Engine, Scheduler & Webhook
+    this.ruleEngine = this._config.rules ? new RuleEngine(this._config.rules, this._store, this, this._config) : null;
+    this.scheduler = this._config.schedule ? new Scheduler(this._config.schedule, this._config) : null;
+    this.webhookSender = this._config.webhook ? new WebhookSender(this._config) : null;
   }
 
   // ── Public API ─────────────────────────────────────────────────────────────
@@ -114,19 +122,54 @@ class Limiter extends EventEmitter {
         }
         // ────────────────────────────────────────────────────────────────────
 
-        const rawKey = this._keyGenerator(req);
-        const key    = `${this._config.keyPrefix}${rawKey}`;
+        let result;
+        let rawKey;
+        let key;
+        let failedRuleName;
 
-        const result = await this._runCheck(key);
+        if (this.ruleEngine) {
+          const ruleResult = await this.ruleEngine.check(req);
+          result = ruleResult.mostRestrictive;
+          rawKey = ruleResult.key; // composite key
+          key = ruleResult.key;
+          failedRuleName = ruleResult.failedRule ? ruleResult.failedRule.name : undefined;
+
+          if (this._config.headers) {
+            res.setHeader('X-RateLimit-Rule-Count', ruleResult.results.length);
+            if (!ruleResult.allowed && failedRuleName) {
+              res.setHeader('X-RateLimit-Failed-Rule', failedRuleName);
+            }
+          }
+        } else {
+          rawKey = this._keyGenerator(req);
+          key    = `${this._config.keyPrefix}${rawKey}`;
+          result = await this._runCheck(key);
+        }
         
         // Emit events
-        if (result.allowed) this.emit('allowed', rawKey, result);
-        else this.emit('blocked', rawKey, result);
+        if (result.allowed) {
+          this.emit('allowed', rawKey, result);
+        } else {
+          this.emit('blocked', rawKey, result);
+          if (this.webhookSender) {
+             this.webhookSender.send({
+               event: 'blocked',
+               key,
+               ip: clientIp,
+               limit: result.limit,
+               count: result.limit - result.remaining,
+               timestamp: new Date().toISOString(),
+               retryAfter: result.retryAfter,
+               strategy: result.strategy,
+               ...(failedRuleName ? { ruleName: failedRuleName } : {})
+             });
+          }
+        }
 
         // Record analytics
         this._analytics.record(key, result.allowed);
 
-        // Set headers
+        // Set headers (base headers overrides single rule headers if rule engine is active, that is fine)
         if (this._config.headers) {
           setHeaders(res, result);
         }
@@ -307,6 +350,8 @@ class Limiter extends EventEmitter {
       };
     }
 
+    stats.activeSchedule = this.scheduler ? this.scheduler.resolve() : null;
+
     stats.config = {
       strategy: this._config.strategy,
       windowMs: this._config.windowMs,
@@ -342,14 +387,14 @@ class Limiter extends EventEmitter {
    * @returns {import('../core/result').RateLimitResult}
    */
   _runCheck(key) {
-    let effectiveConfig = this._config;
+    let effectiveConfig = this.scheduler ? this.scheduler.resolve() : this._config;
 
     // Apply smart penalty if relevant
     if (this._smart) {
       const { penalized, effectiveMax } = this._smart.check(key);
       if (penalized) {
         // Create a shallow config override with reduced max
-        effectiveConfig = { ...this._config, max: effectiveMax };
+        effectiveConfig = { ...effectiveConfig, max: effectiveMax };
       }
     }
 

@@ -88,6 +88,15 @@ const DEFAULT_CONFIG = {
   whitelist:     null,       // string[] — IPs/CIDRs that bypass rate limiting
   blacklist:     null,       // string[] — IPs/CIDRs that always get 403
   statsInterval: undefined,  // ms interval to emit 'stats' event
+
+  rules:         null,       // RuleConfig[] — multiple rate limit constraints
+  schedule:      null,       // ScheduleEntry[] — time-based config overrides
+
+  webhook:           null,
+  webhookRetries:    3,
+  webhookBackoff:    'exponential',
+  webhookTimeout:    5000,
+  webhookSecret:     null,
 };
 
 /**
@@ -98,13 +107,31 @@ const DEFAULT_CONFIG = {
 function resolveConfig(userOptions = {}) {
   let base = { ...DEFAULT_CONFIG };
 
-  // Apply named preset first (lowest priority)
-  if (userOptions.preset && PRESETS[userOptions.preset]) {
-    base = { ...base, ...PRESETS[userOptions.preset] };
+  // Apply preset
+  if (userOptions.preset) { // Use userOptions.preset here to ensure it's applied
+    const presetCfg = PRESETS[userOptions.preset];
+    if (!presetCfg) throw new Error(`[NextLimiter] Unknown preset: ${userOptions.preset}`);
+    // Merge preset config into base, allowing userOptions to override later
+    base = { ...base, ...presetCfg };
   }
 
-  // Merge user options
-  base = { ...base, ...userOptions };
+  // Mutually exclusive core configurations
+  const hasRules = userOptions.rules !== undefined && userOptions.rules !== null;
+  const hasSchedule = userOptions.schedule !== undefined && userOptions.schedule !== null;
+  const hasMax = userOptions.max !== undefined && userOptions.max !== null;
+
+  if (hasRules && hasSchedule) {
+    throw new Error('[NextLimiter] config.rules and config.schedule are mutually exclusive.');
+  }
+  if (hasRules && hasMax) {
+    throw new Error('[NextLimiter] config.max/windowMs and config.rules are mutually exclusive.');
+  }
+  if (hasSchedule && hasMax) {
+    throw new Error('[NextLimiter] config.max/windowMs and config.schedule are mutually exclusive.');
+  }
+
+  // Apply user overrides
+  Object.assign(base, userOptions);
 
   // Apply plan limits (overrides windowMs and max if plan is set)
   if (base.plan) {
@@ -120,9 +147,45 @@ function resolveConfig(userOptions = {}) {
     base._burstMax = planCfg.burstMax;
   }
 
-  // Validate
-  if (base.max <= 0) throw new Error('[NextLimiter] config.max must be greater than 0');
-  if (base.windowMs <= 0) throw new Error('[NextLimiter] config.windowMs must be greater than 0');
+  // Deep validate
+  if (base.rules) {
+    if (!Array.isArray(base.rules) || base.rules.length === 0) {
+      throw new Error('[NextLimiter] config.rules must be a non-empty array.');
+    }
+    for (const rule of base.rules) {
+      if (!rule.keyBy) throw new Error('[NextLimiter] Each rule must have a keyBy property.');
+      if (typeof rule.max !== 'number' || rule.max <= 0) throw new Error('[NextLimiter] Each rule must have a positive max integer.');
+      if (typeof rule.windowMs !== 'number' || rule.windowMs <= 0) throw new Error('[NextLimiter] Each rule must have a positive windowMs integer.');
+    }
+  } else if (base.schedule) {
+    if (!Array.isArray(base.schedule) || base.schedule.length === 0) {
+      throw new Error('[NextLimiter] config.schedule must be a non-empty array.');
+    }
+    let prevEnd = -1;
+    for (let i = 0; i < base.schedule.length; i++) {
+        const entry = base.schedule[i];
+        if (!entry.hours) throw new Error('[NextLimiter] Each schedule entry must have an hours string (e.g., "9-17").');
+        if (typeof entry.max !== 'number' || entry.max <= 0) throw new Error('[NextLimiter] Each schedule entry must have a positive max integer.');
+        
+        const match = /^\s*(\d{1,2})\s*-\s*(\d{1,2})\s*$/.exec(entry.hours);
+        if (!match) throw new Error(`[NextLimiter] Invalid hours format: ${entry.hours}`);
+        let s = parseInt(match[1], 10), e = parseInt(match[2], 10);
+        if (s < 0 || s > 23 || e < 0 || e > 23) throw new Error('[NextLimiter] Schedule hours must be between 0 and 23. Got: ' + entry.hours);
+        if (e < s) throw new Error(`[NextLimiter] Invalid schedule: end hour (${e}) cannot be less than start hour (${s}).`);
+        
+        // Basic overlap check
+        if (s <= prevEnd) console.warn(`[NextLimiter] Warning: Overlapping schedule entries detected.`);
+        prevEnd = e;
+    }
+    if (prevEnd < 23) console.warn(`[NextLimiter] Warning: Schedule entries do not cover a full 24-hr cycle.`);
+    // Base max/windowMs must still be valid for fallback
+    if (base.max <= 0) throw new Error('[NextLimiter] config.max must be greater than 0');
+    if (base.windowMs <= 0) throw new Error('[NextLimiter] config.windowMs must be greater than 0');
+  } else {
+    // Standard mode validation
+    if (base.max <= 0) throw new Error('[NextLimiter] config.max must be greater than 0');
+    if (base.windowMs <= 0) throw new Error('[NextLimiter] config.windowMs must be greater than 0');
+  }
 
   // Validate whitelist / blacklist (warn, never throw)
   for (const listName of ['whitelist', 'blacklist']) {
@@ -157,6 +220,18 @@ function resolveConfig(userOptions = {}) {
       console.warn('[NextLimiter] config.statsInterval must be at least 1000ms. Clamping to 1000ms.');
       base.statsInterval = 1000;
     }
+  }
+
+  // Validate webhook
+  if (base.webhook) {
+    if (!base.webhook.startsWith('http://') && !base.webhook.startsWith('https://')) {
+        throw new Error('[NextLimiter] config.webhook must be a valid URL starting with http:// or https://');
+    }
+    if (base.webhook.startsWith('http://')) {
+        console.warn('[NextLimiter] Warning: Webhook URL is using insecure http://. Consider switching to https://');
+    }
+    if (base.webhookRetries < 0 || base.webhookRetries > 10) base.webhookRetries = 3;
+    if (base.webhookTimeout < 500) base.webhookTimeout = 5000;
   }
 
   return base;

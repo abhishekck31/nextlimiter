@@ -23,6 +23,41 @@ export interface PlanDefinition {
   description?: string;
 }
 
+export interface RuleConfig {
+  keyBy: 'ip' | 'api-key' | 'user-id' | string | ((req: Request) => string);
+  max: number;
+  windowMs: number;
+  strategy?: 'sliding-window' | 'token-bucket' | 'fixed-window';
+  name?: string;
+}
+
+export interface RuleEngineResult {
+  allowed: boolean;
+  failedRule: RuleConfig | null;
+  results: RateLimitResult[];
+  mostRestrictive: RateLimitResult;
+  key: string;
+}
+
+export interface ScheduleEntry {
+  hours: string;
+  max: number;
+  windowMs?: number;
+  strategy?: string;
+}
+
+export interface WebhookPayload {
+  event: string;
+  key: string;
+  ip: string;
+  limit: number;
+  count: number;
+  timestamp: string;
+  retryAfter: number;
+  strategy: string;
+  ruleName?: string;
+}
+
 export type BuiltInPlan = 'free' | 'pro' | 'enterprise';
 export type BuiltInPreset = 'strict' | 'relaxed' | 'api' | 'auth';
 export type Strategy = 'fixed-window' | 'sliding-window' | 'token-bucket';
@@ -105,6 +140,14 @@ export interface LimiterOptions {
 
   /** ms interval to emit 'stats' event. undefined = disabled. */
   statsInterval?: number;
+
+  rules?: RuleConfig[];
+  schedule?: ScheduleEntry[];
+  webhook?: string;
+  webhookRetries?: number;
+  webhookBackoff?: 'exponential' | 'linear' | 'fixed';
+  webhookTimeout?: number;
+  webhookSecret?: string;
 }
 
 // ── Rate limit result ────────────────────────────────────────────────────────

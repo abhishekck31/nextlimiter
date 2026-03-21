@@ -1179,3 +1179,170 @@ describe('Event emitter', () => {
   });
 });
 
+// ─── Rule Engine ─────────────────────────────────────────────────────────────
+
+describe('Rule Engine', () => {
+  test('All rules pass -> request allowed', async () => {
+    const rules = [
+      { keyBy: () => 'ip-1', max: 5, windowMs: 1000, name: 'per-ip' },
+      { keyBy: () => 'user-1', max: 10, windowMs: 1000, name: 'per-user' }
+    ];
+    const limiter = createLimiter({ rules, failOpen: false });
+    
+    // Call middleware
+    const mw = limiter.middleware();
+    const req = { method: 'GET', path: '/', headers: {}, socket: { remoteAddress: '1.1.1.1' } };
+    const res = { setHeader: jest.fn(), status: jest.fn(() => res), json: jest.fn(), set: jest.fn() };
+    const next = jest.fn();
+
+    await mw(req, res, next);
+    expect(next).toHaveBeenCalled();
+    expect(res.setHeader).toHaveBeenCalledWith('X-RateLimit-Rule-Count', 2);
+  });
+
+  test('First rule fails -> request blocked, failedRule is rule 0', async () => {
+    const rules = [
+      { keyBy: () => 'ip-1', max: 1, windowMs: 1000, name: 'per-ip' },
+      { keyBy: () => 'user-1', max: 10, windowMs: 1000, name: 'per-user' }
+    ];
+    const limiter = createLimiter({ rules, failOpen: false });
+    const mw = limiter.middleware();
+    const req = { method: 'GET', path: '/', headers: {}, socket: { remoteAddress: '2.2.2.2' } };
+    const res = { setHeader: jest.fn(), status: jest.fn(() => res), json: jest.fn(), set: jest.fn() };
+    const next = jest.fn();
+
+    await mw(req, res, next); // allowed
+    await mw(req, res, next); // blocked
+
+    expect(res.status).toHaveBeenCalledWith(429);
+    expect(res.setHeader).toHaveBeenCalledWith('X-RateLimit-Failed-Rule', 'per-ip');
+  });
+
+  test('rules and max at same level throws config validation error', () => {
+    expect(() => createLimiter({ max: 5, windowMs: 1000, rules: [{ keyBy: 'ip', max: 5, windowMs: 1000 }] }))
+      .toThrow('mutually exclusive');
+  });
+});
+
+// ─── Webhook Alerts ──────────────────────────────────────────────────────────
+
+describe('Webhook Alerts', () => {
+  const https = require('https');
+  let requestSpy;
+
+  beforeEach(() => {
+    requestSpy = jest.spyOn(https, 'request').mockImplementation((opts, cb) => {
+      // Mock successful webhook (200)
+      const res = new (require('events').EventEmitter)();
+      res.statusCode = 200;
+      process.nextTick(() => {
+        cb(res);
+        res.emit('data', '{}');
+        res.emit('end');
+      });
+      return { on: jest.fn(), setTimeout: jest.fn(), write: jest.fn(), end: jest.fn() };
+    });
+  });
+
+  afterEach(() => {
+    requestSpy.mockRestore();
+  });
+
+  test('Webhook fires after block but NOT for allowed', async () => {
+    const limiter = createLimiter({ max: 1, webhook: 'https://example.com/hook' });
+    const mw = limiter.middleware();
+    const req = { method: 'GET', path: '/', headers: {}, socket: { remoteAddress: '3.3.3.3' } };
+    const res = { setHeader: jest.fn(), status: jest.fn(() => res), json: jest.fn(), set: jest.fn() };
+    const next = jest.fn();
+
+    await mw(req, res, next);
+    expect(requestSpy).not.toHaveBeenCalled(); // allowed
+
+    await mw(req, res, next); // blocked
+    expect(requestSpy).toHaveBeenCalledTimes(1);
+
+    // Verify webhook payload
+    const bodyWritten = requestSpy.mock.results[0].value.write.mock.calls[0][0];
+    const payload = JSON.parse(bodyWritten);
+    expect(payload.event).toBe('blocked');
+    expect(payload.limit).toBe(1);
+    expect(payload.count).toBe(1);
+  });
+
+  test('Webhook does NOT fire for whitelisted IPs', async () => {
+    const limiter = createLimiter({ max: 1, webhook: 'https://example.com/hook', whitelist: ['1.1.1.1'], keyBy: 'ip' });
+    const mw = limiter.middleware();
+    const req = { method: 'GET', path: '/', ip: '1.1.1.1', headers: {}, socket: { remoteAddress: '1.1.1.1' } };
+    const res = { setHeader: jest.fn(), status: jest.fn(() => res), json: jest.fn(), set: jest.fn() };
+    const next = jest.fn();
+
+    await mw(req, res, next);
+    expect(requestSpy).not.toHaveBeenCalled(); 
+  });
+
+  test('Webhook HMAC signature header', async () => {
+    const secret = 'my-secret';
+    const limiter = createLimiter({ max: 1, webhook: 'https://example.com/hook', webhookSecret: secret });
+    const mw = limiter.middleware();
+    const req = { method: 'GET', path: '/', headers: {}, socket: { remoteAddress: '4.4.4.4' } };
+    const res = { setHeader: jest.fn(), status: jest.fn(() => res), json: jest.fn(), set: jest.fn() };
+    
+    await mw(req, res, jest.fn()); // allowed
+    await mw(req, res, jest.fn()); // blocked
+    
+    expect(requestSpy).toHaveBeenCalledTimes(1);
+    const options = requestSpy.mock.calls[0][0];
+    expect(options.headers['X-nextlimiter-signature']).toMatch(/^sha256=[a-f0-9]{64}$/);
+  });
+});
+
+// ─── Time-Based Schedules ────────────────────────────────────────────────────
+
+describe('Time-Based Schedules', () => {
+  beforeEach(() => {
+    jest.useFakeTimers();
+  });
+  afterEach(() => {
+    jest.useRealTimers();
+  });
+
+  test('Resolves schedule limits correctly based on UTC hour', async () => {
+    const schedule = [
+      { hours: '0-8', max: 10, windowMs: 60000 },
+      { hours: '9-17', max: 300, windowMs: 60000 }, 
+      { hours: '18-23', max: 100, windowMs: 60000 }
+    ];
+
+    const limiter = createLimiter({ schedule, keyBy: 'ip' });
+
+    // Mock Date to 12 PM UTC (business hours) -> max 300
+    jest.setSystemTime(new Date('2024-01-01T12:00:00Z'));
+    const stats12 = limiter.getStats();
+    expect(stats12.activeSchedule.max).toBe(300);
+
+    // Mock Date to 3 AM UTC (night) -> max 10
+    jest.setSystemTime(new Date('2024-01-01T03:00:00Z'));
+    const stats3 = limiter.getStats();
+    expect(stats3.activeSchedule.max).toBe(10);
+
+    // Mock Date to 20 UTC (evening) -> max 100
+    jest.setSystemTime(new Date('2024-01-01T20:00:00Z'));
+    const stats20 = limiter.getStats();
+    expect(stats20.activeSchedule.max).toBe(100);
+  });
+
+  test('schedule and rules together throws config validation error', () => {
+    expect(() => createLimiter({ 
+        schedule: [{ hours: '0-23', max: 10 }], 
+        rules: [{ keyBy: 'ip', max: 5, windowMs: 1000 }] 
+    })).toThrow('mutually exclusive');
+  });
+
+  test('Invalid hours string throws descriptive error', () => {
+    expect(() => createLimiter({ schedule: [{ hours: '25-30', max: 10 }] }))
+      .toThrow('between 0 and 23');
+      
+    expect(() => createLimiter({ schedule: [{ hours: '17-9', max: 10 }] }))
+      .toThrow('cannot be less than start hour');
+  });
+});

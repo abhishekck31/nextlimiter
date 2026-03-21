@@ -1,6 +1,6 @@
 {
   "name": "nextlimiter",
-  "version": "1.1.0",
+  "version": "1.2.0",
   "description": "Production-ready rate limiting for Node.js — sliding window, token bucket, SaaS plans, smart limiting, and built-in analytics.",
   "main": "src/index.js",
   "types": "types/index.d.ts",
