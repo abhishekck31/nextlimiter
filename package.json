@@ -29,7 +29,7 @@
     "throttle",
     "nodejs"
   ],
-  "author": "Abhishek <abhishek.ck3110@gmail.com>",
+  "author": "",
   "license": "MIT",
   "engines": {
     "node": ">=14.0.0"
@@ -61,10 +61,10 @@
   },
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/abhishekck31/nexlimit.git"
+    "url": "git+https://github.com/yourusername/nexlimit.git"
   },
   "bugs": {
-    "url": "https://github.com/abhishekck31/nexlimit/issues"
+    "url": ""
   },
-  "homepage": "https://github.com/abhishekck31/nexlimit#readme"
+  "homepage": "https://github.com/yourusername/nexlimit#readme"
 }
