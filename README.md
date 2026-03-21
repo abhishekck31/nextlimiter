@@ -4,7 +4,7 @@
 
 [![npm version](https://badge.fury.io/js/nextlimiter.svg)](https://www.npmjs.com/package/nextlimiter)
 [![License: MIT](https://img.shields.io/badge/License-MIT-green.svg)](LICENSE)
-[![Tests](https://img.shields.io/badge/tests-38%20passing-brightgreen)]()
+[![Tests](https://img.shields.io/badge/tests-38%20passing-brightgreen)](https://github.com/abhishekck31/nexlimiter/actions)
 
 ---
 
@@ -20,6 +20,7 @@ Most rate limiting libraries make you choose between simple-but-limited and powe
 | Built-in analytics | ✗ | ✗ | **✓** |
 | Programmatic `check()` API | ✗ | ✓ | ✓ |
 | Named presets | ✗ | ✗ | **✓** |
+| Redis support (built-in) | ✗ | ✓ | **✓** |
 | TypeScript types included | ✓ | ✓ | ✓ |
 | Zero dependencies | ✓ | ✗ | ✓ |
 
@@ -32,6 +33,12 @@ npm install nextlimiter
 ```
 
 No Redis required. Works out of the box with in-memory storage.
+
+For distributed / multi-server deployments, add Redis:
+
+```bash
+npm install ioredis
+```
 
 ---
 
@@ -347,7 +354,7 @@ createLimiter({
 | `headers` | `boolean` | `true` | Send `X-RateLimit-*` headers |
 | `statusCode` | `number` | `429` | HTTP status for blocked requests |
 | `message` | `string` | `'Too many requests...'` | Default 429 message |
-| `store` | `Store` | `MemoryStore` | Custom storage backend |
+| `store` | `Store` | `MemoryStore` | Custom storage backend (`MemoryStore` or `RedisStore`) |
 | `skip` | `fn` | `null` | `(req) => boolean` — skip rate limiting |
 | `onLimitReached` | `fn` | `null` | `(req, res, result) => void` |
 | `keyGenerator` | `fn` | `null` | `(req) => string` — override key generation |
@@ -368,47 +375,79 @@ Retry-After:           47          ← only on 429 responses
 
 ---
 
-## Custom Store (Redis example)
+## Redis Support (Distributed Deployments)
 
-Implement the `Store` interface to use any backend:
+NextLimiter ships a built-in `RedisStore` for distributed / multi-server setups. It uses an **atomic Lua script** for `increment()` so there are zero race conditions across multiple Node.js processes behind a load balancer.
+
+### Installation
+
+```bash
+npm install ioredis
+```
+
+### Usage
 
 ```js
 const Redis = require('ioredis');
+const { createLimiter, RedisStore } = require('nextlimiter');
 
-class RedisStore {
-  constructor(client) {
-    this.client = client;
-  }
+const redis = new Redis(); // connects to 127.0.0.1:6379 by default
 
-  async get(key) {
-    const val = await this.client.get(key);
-    return val ? JSON.parse(val) : undefined;
-  }
+const limiter = createLimiter({
+  store:    new RedisStore(redis),
+  max:      100,
+  windowMs: 60_000,
+  strategy: 'sliding-window',
+  keyBy:    'ip',
+  logging:  true,
+});
 
-  async set(key, value, ttlMs) {
-    await this.client.set(key, JSON.stringify(value), 'PX', ttlMs);
-  }
+app.use('/api', limiter.middleware());
+```
 
-  async increment(key, ttlMs) {
-    const count = await this.client.incr(key);
-    if (count === 1) await this.client.pexpire(key, ttlMs);
-    return count;
-  }
+### With Redis Cluster / Sentinel
 
-  async delete(key) {
-    await this.client.del(key);
-  }
+```js
+// Redis Cluster
+const redis = new Redis.Cluster([{ host: '127.0.0.1', port: 6380 }]);
 
-  keys() { return []; } // optional
-  clear() {}            // optional
+// Redis Sentinel
+const redis = new Redis({
+  sentinels: [{ host: 'sentinel-1', port: 26379 }],
+  name: 'mymaster',
+});
+
+const limiter = createLimiter({ store: new RedisStore(redis), max: 100 });
+```
+
+### How the Lua Script Works
+
+The `increment()` method uses a single-script atomic operation:
+
+```lua
+local new = redis.call('INCR', KEYS[1])
+if new == 1 then
+  redis.call('PEXPIRE', KEYS[1], tonumber(ARGV[1]))
+end
+return new
+```
+
+All three steps (INCR + conditional PEXPIRE) execute atomically in Redis — no race condition is possible, even with 100+ Node.js instances.
+
+### Custom Store Interface
+
+You can also implement your own store for any backend (MongoDB, DynamoDB, Postgres, etc.) — just implement 5 methods:
+
+```js
+class MyCustomStore {
+  async get(key)                 { /* return value or undefined */ }
+  async set(key, value, ttlMs)  { /* store with TTL */ }
+  async increment(key, ttlMs)   { /* atomic increment, return new count */ }
+  async delete(key)             { /* remove key */ }
+  keys()                        { /* return string[] — can be [] */ }
 }
 
-// Use it:
-const limiter = createLimiter({
-  store: new RedisStore(new Redis()),
-  windowMs: 60_000,
-  max: 100,
-});
+const limiter = createLimiter({ store: new MyCustomStore() });
 ```
 
 ---
@@ -418,17 +457,22 @@ const limiter = createLimiter({
 Full TypeScript support included — no `@types/nextlimiter` needed:
 
 ```ts
-import { createLimiter, LimiterOptions, RateLimitResult, Store } from 'nextlimiter';
+import { createLimiter, RedisStore, LimiterOptions, RateLimitResult, Store } from 'nextlimiter';
+import Redis from 'ioredis';
 
-const options: LimiterOptions = {
-  windowMs: 60_000,
+// In-memory (development)
+const limiter = createLimiter({ windowMs: 60_000, max: 100 });
+
+// Redis-backed (production)
+const redis = new Redis();
+const prodLimiter = createLimiter({
+  store:    new RedisStore(redis),
   max:      100,
-  strategy: 'token-bucket',
+  strategy: 'sliding-window',
   smart:    true,
-};
+});
 
-const limiter = createLimiter(options);
-const result: RateLimitResult = await limiter.check('user:42');
+const result: RateLimitResult = await prodLimiter.check('user:42');
 ```
 
 ---

@@ -1,6 +1,6 @@
 {
   "name": "nextlimiter",
-  "version": "1.0.2",
+  "version": "1.0.3",
   "description": "Production-ready rate limiting for Node.js — sliding window, token bucket, SaaS plans, smart limiting, and built-in analytics.",
   "main": "src/index.js",
   "types": "types/index.d.ts",
@@ -35,10 +35,14 @@
     "node": ">=14.0.0"
   },
   "peerDependencies": {
-    "express": ">=4.0.0"
+    "express": ">=4.0.0",
+    "ioredis": ">=4.0.0"
   },
   "peerDependenciesMeta": {
     "express": {
+      "optional": true
+    },
+    "ioredis": {
       "optional": true
     }
   },
@@ -61,10 +65,10 @@
   },
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/abhishekck31/nextlimiter.git"
+    "url": "git+https://github.com/abhishekck31/nexlimiter.git"
   },
   "bugs": {
-    "url": "https://github.com/abhishekck31/nextlimiter/issues"
+    "url": "https://github.com/abhishekck31/nexlimiter/issues"
   },
-  "homepage": "https://github.com/abhishekck31/nextlimiter#readme"
+  "homepage": "https://github.com/abhishekck31/nexlimiter#readme"
 }
