@@ -2,7 +2,7 @@
 
 **Production-ready rate limiting for Node.js — simple, smart, and built for real SaaS apps.**
 
-[![npm version](https://badge.fury.io/js/nextlimiter.svg)](https://www.npmjs.com/package/nextlimiter)
+[![npm version](https://img.shields.io/npm/v/nextlimiter.svg?color=success)](https://www.npmjs.com/package/nextlimiter)
 [![License: MIT](https://img.shields.io/badge/License-MIT-green.svg)](LICENSE)
 
 ---
@@ -11,7 +11,7 @@
 
 Most rate limiting libraries make you choose between simple-but-limited and powerful-but-complex. NextLimiter brings Enterprise-grade rate limiting directly to your stack with **zero external dependencies**.
 
-| Feature | express-rate-limit | rate-limiter-flexible | **NextLimiter (v1.3.0)** |
+| Feature | express-rate-limit | rate-limiter-flexible | **NextLimiter (v1.3.x)** |
 |---|---|---|---|
 | Zero-config usage | ✓ | ✗ | ✓ |
 | Supported Frameworks | Express | Agnostic | **Express, Fastify, Next.js, Hono** |
