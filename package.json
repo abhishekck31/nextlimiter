@@ -1,5 +1,5 @@
 {
-  "name": "nexlimit",
+  "name": "nextlimit",
   "version": "1.0.0",
   "description": "Production-ready rate limiting for Node.js — sliding window, token bucket, SaaS plans, smart limiting, and built-in analytics.",
   "main": "src/index.js",
