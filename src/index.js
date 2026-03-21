@@ -5,6 +5,7 @@ const { PRESETS, DEFAULT_PLANS } = require('./core/config');
 const { MemoryStore } = require('./store/memoryStore');
 const { RedisStore }  = require('./store/redisStore');
 const { ipMatchesCidr, ipMatchesList } = require('./utils/cidr');
+const { PrometheusFormatter } = require('./analytics/prometheus');
 
 /**
  * Create a fully configured rate limiter instance.
@@ -106,6 +107,9 @@ module.exports = {
   // CIDR utilities (for advanced use)
   ipMatchesCidr,
   ipMatchesList,
+
+  // Analytics export
+  PrometheusFormatter,
 
   // Constants
   PRESETS,

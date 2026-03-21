@@ -862,3 +862,132 @@ describe('IP whitelist and blacklist', () => {
     expect(nReq.reason).toBeUndefined();
   });
 });
+
+// ─── Prometheus Metrics ───────────────────────────────────────────────────────
+
+describe('Prometheus metrics', () => {
+  const { PrometheusFormatter } = require('../src/analytics/prometheus');
+
+  test('empty stats (zero requests) produces valid output, no NaN values', () => {
+    const limiter = createLimiter();
+    const formatter = new PrometheusFormatter(limiter);
+    const text = formatter.format();
+
+    expect(text).toContain('# HELP nextlimiter_requests_total');
+    expect(text).toContain('# TYPE nextlimiter_requests_total counter');
+    expect(text).toContain('nextlimiter_requests_total{status="allowed"} 0');
+    expect(text).toContain('nextlimiter_requests_total{status="blocked"} 0');
+    
+    // Block rate should be 0 when no requests, not NaN
+    expect(text).toContain('nextlimiter_block_rate 0\n');
+    expect(text).not.toContain('NaN');
+    expect(text.endsWith('\n')).toBe(true); // format() output ends with a newline character
+  });
+
+  test('allowed and blocked counts match getStats() values exactly', async () => {
+    const limiter = createLimiter({ max: 2 });
+    
+    await limiter.check('ip:1.1.1.1');
+    await limiter.check('ip:1.1.1.1');
+    await limiter.check('ip:1.1.1.1'); // blocked
+
+    const stats = limiter.getStats();
+    expect(stats.allowedRequests).toBe(2);
+    expect(stats.blockedRequests).toBe(1);
+    expect(stats.totalRequests).toBe(3);
+
+    const formatter = new PrometheusFormatter(limiter);
+    const text = formatter.format();
+
+    expect(text).toContain(`nextlimiter_requests_total{status="allowed"} 2`);
+    expect(text).toContain(`nextlimiter_requests_total{status="blocked"} 1`);
+  });
+
+  test('block_rate value matches getStats().blockRate', async () => {
+    const limiter = createLimiter({ max: 1 });
+    await limiter.check('ip:2.2.2.2');
+    await limiter.check('ip:2.2.2.2'); // blocked
+
+    const formatter = new PrometheusFormatter(limiter);
+    const text = formatter.format();
+    const stats = limiter.getStats();
+    
+    expect(text).toContain(`nextlimiter_block_rate ${stats.blockRate}`);
+  });
+
+  test('topBlocked entries appear as individual labelled lines', async () => {
+    const limiter = createLimiter({ max: 1 });
+    await limiter.check('ip:3.3.3.3');
+    await limiter.check('ip:3.3.3.3'); // block 1
+    await limiter.check('ip:3.3.3.3'); // block 2
+    
+    await limiter.check('user:bob');
+    await limiter.check('user:bob'); // block 1
+
+    const text = new PrometheusFormatter(limiter).format();
+    
+    expect(text).toContain('# TYPE nextlimiter_top_blocked_ip gauge');
+    // Notice that the "nextlimiter:ip:" prefix should be stripped, but "nextlimiter:user:" remains "user:"
+    expect(text).toContain('nextlimiter_top_blocked_ip{ip="3.3.3.3"} 2');
+    expect(text).toContain('nextlimiter_top_blocked_ip{ip="user:bob"} 1');
+  });
+
+  test('label values with special chars (quotes, backslashes) are escaped', async () => {
+    const limiter = createLimiter({ max: 5 });
+    await limiter.check('weird"\\name\n');
+
+    const text = new PrometheusFormatter(limiter).format();
+    // '"' becomes '\"', '\' becomes '\\', '\n' becomes '\n' (escaped)
+    expect(text).toContain('key="nextlimiter:weird\\"\\\\name\\n"');
+  });
+
+  test('metricsHandler() sets Content-Type to Prometheus content type and returns 200', () => {
+    const limiter = createLimiter();
+    const handler = limiter.metricsHandler();
+    
+    let typeSet = null;
+    let bodySent = null;
+    let statusCode = 200;
+
+    const res = {
+      set: (k, v) => { if (k.toLowerCase() === 'content-type') typeSet = v; },
+      send: (body) => { bodySent = body; },
+      status: (code) => { statusCode = code; return res; },
+      type: () => res
+    };
+
+    handler({}, res);
+
+    expect(statusCode).toBe(200);
+    expect(typeSet).toBe('text/plain; version=0.0.4; charset=utf-8');
+    expect(bodySent).toContain('nextlimiter_uptime_seconds');
+  });
+
+  test('metricsMiddleware() intercepts /metrics and serves it', () => {
+    const limiter = createLimiter();
+    const middleware = limiter.metricsMiddleware();
+    
+    const req = { method: 'GET', path: '/metrics' };
+    const res = { set: jest.fn(), send: jest.fn() };
+    const next = jest.fn();
+
+    middleware(req, res, next);
+
+    expect(next).not.toHaveBeenCalled();
+    expect(res.send).toHaveBeenCalled();
+  });
+
+  test('metricsMiddleware() skips other routes', () => {
+    const limiter = createLimiter();
+    const middleware = limiter.metricsMiddleware();
+    
+    const req = { method: 'GET', path: '/api/users' };
+    const res = { set: jest.fn(), send: jest.fn() };
+    const next = jest.fn();
+
+    middleware(req, res, next);
+
+    expect(next).toHaveBeenCalled();
+  });
+});
+

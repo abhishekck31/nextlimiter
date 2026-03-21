@@ -12,6 +12,7 @@ const { AnalyticsTracker }        = require('../analytics/tracker');
 const { SmartDetector }           = require('../smart/detector');
 const { setHeaders }              = require('../middleware/headers');
 const { checkAccess }             = require('./accessControl');
+const { PrometheusFormatter }     = require('../analytics/prometheus');
 
 const STRATEGY_MAP = {
   'fixed-window':   fixedWindowCheck,
@@ -143,6 +144,41 @@ class Limiter {
         this._log.warn(`Error in rate limiter: ${err.message}. Failing open.`);
         next();
       }
+    };
+  }
+
+  /**
+   * Express route handler for serving Prometheus metrics.
+   * Exposes getStats() data in plain text format (version=0.0.4).
+   *
+   * @example
+   * app.get('/metrics', limiter.metricsHandler());
+   */
+  metricsHandler() {
+    return (req, res) => {
+      try {
+        const formatter = new PrometheusFormatter(this);
+        res.set('Content-Type', formatter.contentType());
+        res.send(formatter.format());
+      } catch (err) {
+        res.status(500).type('text/plain').send(`Error generating metrics: ${err.message}`);
+      }
+    };
+  }
+
+  /**
+   * Global middleware that automatically intercepts GET /metrics requests
+   * and serves the Prometheus exposition format. Passes through all other routes.
+   *
+   * @example
+   * app.use(limiter.metricsMiddleware());
+   */
+  metricsMiddleware() {
+    return (req, res, next) => {
+      if (req.method === 'GET' && req.path === '/metrics') {
+        return this.metricsHandler()(req, res);
+      }
+      next();
     };
   }
 

@@ -139,6 +139,12 @@ export interface RateLimitResult {
 
 // ── Analytics ────────────────────────────────────────────────────────────────
 
+export declare class PrometheusFormatter {
+  constructor(limiter: Limiter);
+  format(): string;
+  contentType(): string;
+}
+
 export interface KeyCount {
   key: string;
   count: number;
@@ -180,6 +186,18 @@ export declare class Limiter {
 
   /** Returns an Express-compatible middleware function */
   middleware(): (req: Request, res: Response, next: NextFunction) => Promise<void>;
+
+  /**
+   * Express route handler for serving Prometheus metrics.
+   * Exposes getStats() data in plain text format (version=0.0.4).
+   */
+  metricsHandler(): (req: any, res: any) => void;
+
+  /**
+   * Global middleware that automatically intercepts GET /metrics requests.
+   * Passes through all other routes.
+   */
+  metricsMiddleware(): (req: any, res: any, next: any) => void;
 
   /** Programmatic rate limit check by key string */
   check(key: string): Promise<RateLimitResult>;
