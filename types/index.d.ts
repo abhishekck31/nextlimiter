@@ -96,6 +96,12 @@ export interface LimiterOptions {
 
   /** Fully custom key generator function */
   keyGenerator?: (req: Request) => string;
+
+  /** Array of IPs or CIDR ranges to bypass rate limiting */
+  whitelist?: string[];
+
+  /** Array of IPs or CIDR ranges to block immediately (403) */
+  blacklist?: string[];
 }
 
 // ── Rate limit result ────────────────────────────────────────────────────────
@@ -270,6 +276,18 @@ export declare class RedisStore implements Store {
   keys(): string[];
   clear(): void;
 }
+
+// ── Utilities ────────────────────────────────────────────────────────────────
+
+/**
+ * Check whether an IP matches a CIDR range string.
+ * Supports standard CIDR (10.0.0.0/8) and exact exact IPs (1.2.3.4).
+ */
+export declare function ipMatchesCidr(ip: string, cidr: string): boolean;
+
+/** Check whether an IP matches ANY element in a list of IPs / CIDR ranges. */
+export declare function ipMatchesList(ip: string, list: string[]): boolean;
+
 
 // ── Constants ────────────────────────────────────────────────────────────────
 

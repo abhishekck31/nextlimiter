@@ -6,10 +6,12 @@ const { fixedWindowCheck }        = require('../strategies/fixedWindow');
 const { slidingWindowCheck }      = require('../strategies/slidingWindow');
 const { tokenBucketCheck }        = require('../strategies/tokenBucket');
 const { resolveKeyGenerator }     = require('../utils/keyGenerator');
+const { extractIp }               = require('../utils/keyGenerator');
 const { createLogger }            = require('../utils/logger');
 const { AnalyticsTracker }        = require('../analytics/tracker');
 const { SmartDetector }           = require('../smart/detector');
 const { setHeaders }              = require('../middleware/headers');
+const { checkAccess }             = require('./accessControl');
 
 const STRATEGY_MAP = {
   'fixed-window':   fixedWindowCheck,
@@ -82,6 +84,23 @@ class Limiter {
           return next();
         }
 
+        // ── Access control (whitelist / blacklist) ───────────────────────────
+        const clientIp = extractIp(req);
+        const access   = checkAccess(clientIp, this._config);
+
+        if (access.action === 'block') {
+          return res.status(403).json({
+            error:   'Forbidden',
+            message: 'Your IP address has been blocked.',
+          });
+        }
+
+        if (access.action === 'skip') {
+          // Whitelisted — bypass all rate limiting, proceed immediately
+          return next();
+        }
+        // ────────────────────────────────────────────────────────────────────
+
         const rawKey = this._keyGenerator(req);
         const key    = `${this._config.keyPrefix}${rawKey}`;
 
@@ -138,6 +157,39 @@ class Limiter {
    * if (!result.allowed) throw new Error('Rate limit exceeded');
    */
   async check(key) {
+    // Apply access control if the key looks like a plain IP address
+    const looksLikeIp = /^\d{1,3}(\.\d{1,3}){3}$/.test(String(key).trim());
+    if (looksLikeIp) {
+      const access = checkAccess(key, this._config);
+      if (access.action === 'block') {
+        return {
+          allowed:      false,
+          limit:        this._config.max,
+          remaining:    0,
+          resetAt:      Date.now(),
+          retryAfter:   0,
+          key,
+          strategy:     this._config.strategy,
+          smartBlocked: false,
+          blocked:      true,
+          reason:       'blacklisted',
+        };
+      }
+      if (access.action === 'skip') {
+        return {
+          allowed:    true,
+          limit:      this._config.max,
+          remaining:  Infinity,
+          resetAt:    Date.now() + this._config.windowMs,
+          retryAfter: 0,
+          key,
+          strategy:   this._config.strategy,
+          smartBlocked: false,
+          reason:     'whitelisted',
+        };
+      }
+    }
+
     const fullKey = `${this._config.keyPrefix}${key}`;
     const result  = await this._runCheck(fullKey);
     this._analytics.record(fullKey, result.allowed);

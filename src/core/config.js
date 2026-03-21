@@ -85,6 +85,8 @@ const DEFAULT_CONFIG = {
   plans: DEFAULT_PLANS,     // plan map — override to define custom plans
   preset: null,             // 'strict' | 'relaxed' | 'api' | 'auth'
   keyGenerator: null,       // (req) => string — custom key fn
+  whitelist:     null,       // string[] — IPs/CIDRs that bypass rate limiting
+  blacklist:     null,       // string[] — IPs/CIDRs that always get 403
 };
 
 /**
@@ -120,6 +122,30 @@ function resolveConfig(userOptions = {}) {
   // Validate
   if (base.max <= 0) throw new Error('[NextLimiter] config.max must be greater than 0');
   if (base.windowMs <= 0) throw new Error('[NextLimiter] config.windowMs must be greater than 0');
+
+  // Validate whitelist / blacklist (warn, never throw)
+  for (const listName of ['whitelist', 'blacklist']) {
+    const list = base[listName];
+    if (list == null) continue;
+    if (!Array.isArray(list)) {
+      console.warn(`[NextLimiter] config.${listName} must be an array. Ignoring.`);
+      base[listName] = null;
+      continue;
+    }
+    const valid = [];
+    for (const entry of list) {
+      if (typeof entry !== 'string' || entry.trim() === '') {
+        console.warn(`[NextLimiter] config.${listName}: skipping invalid entry:`, entry);
+        continue;
+      }
+      // Loose format check: must look like x.x.x.x or x.x.x.x/n
+      if (!/^\d{1,3}(\.\d{1,3}){3}(\/\d{1,2})?$/.test(entry.trim())) {
+        console.warn(`[NextLimiter] config.${listName}: entry "${entry}" doesn't look like a valid IP or CIDR. It will be attempted anyway.`);
+      }
+      valid.push(entry.trim());
+    }
+    base[listName] = valid.length > 0 ? valid : null;
+  }
 
   return base;
 }

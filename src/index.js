@@ -4,6 +4,7 @@ const { Limiter }     = require('./core/limiter');
 const { PRESETS, DEFAULT_PLANS } = require('./core/config');
 const { MemoryStore } = require('./store/memoryStore');
 const { RedisStore }  = require('./store/redisStore');
+const { ipMatchesCidr, ipMatchesList } = require('./utils/cidr');
 
 /**
  * Create a fully configured rate limiter instance.
@@ -101,6 +102,10 @@ module.exports = {
   // Storage
   MemoryStore,
   RedisStore,
+
+  // CIDR utilities (for advanced use)
+  ipMatchesCidr,
+  ipMatchesList,
 
   // Constants
   PRESETS,

@@ -676,3 +676,189 @@ describe('Hono adapter — rateLimitMiddleware', () => {
   });
 });
 
+// ─── IP Whitelist and Blacklist ───────────────────────────────────────────────
+
+describe('IP whitelist and blacklist', () => {
+  let mockConsoleWarn;
+
+  beforeEach(() => {
+    mockConsoleWarn = jest.spyOn(console, 'warn').mockImplementation(() => {});
+  });
+
+  afterEach(() => {
+    mockConsoleWarn.mockRestore();
+  });
+
+  test('blacklisted IP gets 403, rate limit store is never touched', async () => {
+    const store = freshStore();
+    const storeIncSpy = jest.spyOn(store, 'increment');
+    const limiter = createLimiter({
+      store,
+      blacklist: ['192.168.1.100'],
+      keyBy: 'ip'
+    });
+    
+    let statusCode = 0;
+    let jsonBody = null;
+    const req = { ip: '192.168.1.100', headers: {} };
+    const res = {
+      status: (code) => { statusCode = code; return res; },
+      json: (body) => { jsonBody = body; return res; }
+    };
+    const next = jest.fn();
+
+    await limiter.middleware()(req, res, next);
+
+    expect(statusCode).toBe(403);
+    expect(jsonBody.error).toBe('Forbidden');
+    expect(next).not.toHaveBeenCalled();
+    expect(storeIncSpy).not.toHaveBeenCalled();
+  });
+
+  test('whitelisted IP bypasses rate limiting even when over limit', async () => {
+    const limiter = createLimiter({
+      max: 1, // very low limit
+      whitelist: ['10.0.5.5'],
+      keyBy: 'ip'
+    });
+    
+    const req = { ip: '10.0.5.5', headers: {} };
+    const res = { status: jest.fn().mockReturnThis(), json: jest.fn() };
+    const next = jest.fn();
+
+    // Do more requests than max
+    await limiter.middleware()(req, res, next);
+    await limiter.middleware()(req, res, next);
+    await limiter.middleware()(req, res, next);
+
+    // It should have called next() 3 times
+    expect(next).toHaveBeenCalledTimes(3);
+    expect(res.status).not.toHaveBeenCalled();
+  });
+
+  test('CIDR blacklist blocks within range and allows outside', async () => {
+    const limiter = createLimiter({ blacklist: ['5.6.0.0/16'] });
+    const middleware = limiter.middleware();
+    
+    const runReq = async (ip) => {
+      let code = 200;
+      const res = { status: (c) => { code = c; return res; }, json: () => {} };
+      const next = jest.fn();
+      await middleware({ ip, headers: {} }, res, next);
+      return { code, calledNext: next.mock.calls.length > 0 };
+    };
+
+    const blocked = await runReq('5.6.1.1');
+    expect(blocked.code).toBe(403);
+    expect(blocked.calledNext).toBe(false);
+
+    const allowed = await runReq('5.7.0.1');
+    expect(allowed.code).toBe(200);   // not changed to 403
+    expect(allowed.calledNext).toBe(true);
+  });
+
+  test('CIDR whitelist skips within range and enforces outside', async () => {
+    // 1 request max to enforce effectively
+    const limiter = createLimiter({ max: 1, whitelist: ['10.0.0.0/8'] });
+    const middleware = limiter.middleware();
+    
+    const runReq = async (ip) => {
+      let code = 200;
+      const res = { 
+        status: (c) => { code = c; return res; }, 
+        json: () => {}, 
+        setHeader: () => {}
+      };
+      const next = jest.fn();
+      await middleware({ ip, headers: {} }, res, next);
+      return { code, calledNext: next.mock.calls.length > 0 };
+    };
+
+    // 10.0.5.5 should bypass and always work
+    let wl1 = await runReq('10.0.5.5');
+    let wl2 = await runReq('10.0.5.5');
+    expect(wl1.calledNext).toBe(true);
+    expect(wl2.calledNext).toBe(true);
+
+    // 11.0.0.1 is outside, should hit limit
+    let norm1 = await runReq('11.0.0.1');
+    let norm2 = await runReq('11.0.0.1');
+    expect(norm1.calledNext).toBe(true);
+    expect(norm2.code).toBe(429);
+  });
+
+  test('exact IP blacklist blocks that exact IP only', async () => {
+    const limiter = createLimiter({ blacklist: ['8.8.8.8'] });
+    const middleware = limiter.middleware();
+    
+    const runReq = async (ip) => {
+      let code = 200;
+      const res = { status: (c) => { code = c; return res; }, json: () => {}, setHeader: () => {} };
+      await middleware({ ip, headers: {} }, res, jest.fn());
+      return code;
+    };
+
+    expect(await runReq('8.8.8.8')).toBe(403);
+    expect(await runReq('8.8.8.9')).not.toBe(403);
+  });
+
+  test('blacklist takes priority over whitelist if IP appears in both', async () => {
+    const limiter = createLimiter({
+      whitelist: ['1.1.1.0/24'],
+      blacklist: ['1.1.1.1'] // Specifically block one IP in the whitelist subnet
+    });
+    
+    let code = 200;
+    const res = { status: (c) => { code = c; return res; }, json: () => {} };
+    await limiter.middleware()({ ip: '1.1.1.1', headers: {} }, res, jest.fn());
+    
+    // Blacklist wins
+    expect(code).toBe(403);
+  });
+
+  test('invalid CIDR entry in list logs warning but does not crash', async () => {
+    const limiter = createLimiter({
+      whitelist: ['10.0.0.0/8', 'invalid_ip', ''], // empty string & invalid IP handled
+      max: 10
+    });
+    
+    expect(mockConsoleWarn).toHaveBeenCalledWith(
+      expect.stringContaining('skipping invalid entry'),
+      ''
+    );
+    expect(mockConsoleWarn).toHaveBeenCalledWith(
+      expect.stringContaining('doesn\'t look like a valid IP or CIDR'),
+    );
+
+    const res = { setHeader: () => {} };
+    const next = jest.fn();
+    await limiter.middleware()({ ip: '10.0.0.1', headers: {} }, res, next);
+    expect(next).toHaveBeenCalled(); // Whitelist still works for the valid entry
+  });
+
+  test('check() programmatic API respects blacklist and whitelist', async () => {
+    const limiter = createLimiter({
+      whitelist: ['20.0.0.0/8'],
+      blacklist: ['30.30.30.30'],
+      max: 5
+    });
+
+    // Check blacklist
+    const bReq = await limiter.check('30.30.30.30');
+    expect(bReq.allowed).toBe(false);
+    expect(bReq.blocked).toBe(true); // new property from access control
+    expect(bReq.reason).toBe('blacklisted');
+
+    // Check whitelist
+    const wReq = await limiter.check('20.20.20.20');
+    expect(wReq.allowed).toBe(true);
+    expect(wReq.remaining).toBe(Infinity);
+    expect(wReq.reason).toBe('whitelisted');
+
+    // Check normal IP
+    const nReq = await limiter.check('40.40.40.40');
+    expect(nReq.allowed).toBe(true);
+    expect(nReq.remaining).not.toBe(Infinity);
+    expect(nReq.reason).toBeUndefined();
+  });
+});

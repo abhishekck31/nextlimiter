@@ -27,6 +27,15 @@ function getIP(req) {
 }
 
 /**
+ * Alias for getIP — exported for use by access control and other utils
+ * that need the raw client IP without a 'ip:' prefix.
+ *
+ * @param {object} req - Express / Node.js request object
+ * @returns {string}
+ */
+const extractIp = getIP;
+
+/**
  * Rate limit by authenticated user ID.
  * Looks for userId in: req.user.id → req.user._id → req.userId → req.auth.userId
  *
@@ -92,4 +101,4 @@ function resolveKeyGenerator(keyBy) {
   }
 }
 
-module.exports = { getIP, getUserId, getApiKey, resolveKeyGenerator };
+module.exports = { getIP, extractIp, getUserId, getApiKey, resolveKeyGenerator };
