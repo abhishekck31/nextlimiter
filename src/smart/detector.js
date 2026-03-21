@@ -18,9 +18,12 @@
 class SmartDetector {
   /**
    * @param {object} config - Resolved NextLimiter config
+   * @param {import('events').EventEmitter} [emitter] - Optional event emitter
    */
-  constructor(config) {
+  constructor(config, emitter) {
     this._config = config;
+    this._emitter = emitter;
+    this._penalizedSet = new Set();
 
     // Map: key → { windowStart, count, penalized, penaltyExpires }
     /** @type {Map<string, object>} */
@@ -64,6 +67,17 @@ class SmartDetector {
       if (state.count > normalRatePerObsWindow * config.smartThreshold) {
         state.penalized      = true;
         state.penaltyExpires = now + config.smartCooldownMs;
+
+        if (this._emitter && !this._penalizedSet.has(key)) {
+          this._penalizedSet.add(key);
+          this._emitter.emit('penalized', key, {
+            key,
+            normalLimit: config.max,
+            reducedLimit: Math.floor(config.max * config.smartPenaltyFactor),
+            cooldownMs: config.smartCooldownMs,
+            detectedAt: new Date().toISOString()
+          });
+        }
       }
 
       // Reset observation window
@@ -84,6 +98,7 @@ class SmartDetector {
     // Penalty expired — lift it
     if (state.penalized && now >= state.penaltyExpires) {
       state.penalized = false;
+      this._penalizedSet.delete(key);
     }
 
     return { penalized: false, effectiveMax: config.max };
@@ -111,6 +126,7 @@ class SmartDetector {
   /** Clear all tracking state. */
   reset() {
     this._state.clear();
+    this._penalizedSet.clear();
   }
 }
 

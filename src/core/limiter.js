@@ -1,5 +1,6 @@
 'use strict';
 
+const EventEmitter                = require('events');
 const { resolveConfig }           = require('./config');
 const { MemoryStore }             = require('../store/memoryStore');
 const { fixedWindowCheck }        = require('../strategies/fixedWindow');
@@ -33,11 +34,15 @@ const STRATEGY_MAP = {
  * // Programmatic check
  * const result = await limiter.check('user:42');
  */
-class Limiter {
+class Limiter extends EventEmitter {
   /**
    * @param {object} options - NextLimiter configuration (see config.js for defaults)
    */
   constructor(options = {}) {
+    super();
+    this.setMaxListeners(50);
+    this.on('error', () => {}); // default no-op handler prevents crashes
+
     this._config = resolveConfig(options);
 
     // Storage backend
@@ -64,7 +69,14 @@ class Limiter {
     this._analytics = new AnalyticsTracker();
 
     // Smart detector
-    this._smart = this._config.smart ? new SmartDetector(this._config) : null;
+    this._smart = this._config.smart ? new SmartDetector(this._config, this) : null;
+
+    // Stats event interval
+    if (this._config.statsInterval) {
+      this._statsTimer = setInterval(() => {
+        this.emit('stats', this.getStats());
+      }, this._config.statsInterval).unref();
+    }
   }
 
   // ── Public API ─────────────────────────────────────────────────────────────
@@ -87,7 +99,7 @@ class Limiter {
 
         // ── Access control (whitelist / blacklist) ───────────────────────────
         const clientIp = extractIp(req);
-        const access   = checkAccess(clientIp, this._config);
+        const access   = checkAccess(clientIp, this._config, this);
 
         if (access.action === 'block') {
           return res.status(403).json({
@@ -106,13 +118,17 @@ class Limiter {
         const key    = `${this._config.keyPrefix}${rawKey}`;
 
         const result = await this._runCheck(key);
+        
+        // Emit events
+        if (result.allowed) this.emit('allowed', rawKey, result);
+        else this.emit('blocked', rawKey, result);
 
         // Record analytics
         this._analytics.record(key, result.allowed);
 
         // Set headers
         if (this._config.headers) {
-          setHeaders(res, result, !result.allowed);
+          setHeaders(res, result);
         }
 
         if (!result.allowed) {
@@ -140,8 +156,9 @@ class Limiter {
 
         next();
       } catch (err) {
+        this.emit('error', err);
         // Never let rate limiter errors take down the application
-        this._log.warn(`Error in rate limiter: ${err.message}. Failing open.`);
+        this._log.warn(`Middleware error: ${err.message}. Failing open.`);
         next();
       }
     };
@@ -196,7 +213,7 @@ class Limiter {
     // Apply access control if the key looks like a plain IP address
     const looksLikeIp = /^\d{1,3}(\.\d{1,3}){3}$/.test(String(key).trim());
     if (looksLikeIp) {
-      const access = checkAccess(key, this._config);
+      const access = checkAccess(key, this._config, this);
       if (access.action === 'block') {
         return {
           allowed:      false,
@@ -229,7 +246,33 @@ class Limiter {
     const fullKey = `${this._config.keyPrefix}${key}`;
     const result  = await this._runCheck(fullKey);
     this._analytics.record(fullKey, result.allowed);
+
+    if (result.allowed) this.emit('allowed', key, result);
+    else this.emit('blocked', key, result);
+
     return result;
+  }
+
+  /**
+   * Reset rate limit state for a key.
+   *
+   * @param {string} key
+   */
+  resetKey(key) {
+    const fullKey = `${this._config.keyPrefix}${key}`;
+    this._store.delete(fullKey);
+    this.emit('reset', key);
+  }
+
+  /**
+   * Cleanly dispose of stats cycles and store buffers.
+   */
+  destroy() {
+    if (this._statsTimer) clearInterval(this._statsTimer);
+    if (this._store && typeof this._store.destroy === 'function') {
+      this._store.destroy();
+    }
+    this.removeAllListeners();
   }
 
   /**

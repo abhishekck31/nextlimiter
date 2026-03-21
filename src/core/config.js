@@ -87,6 +87,7 @@ const DEFAULT_CONFIG = {
   keyGenerator: null,       // (req) => string — custom key fn
   whitelist:     null,       // string[] — IPs/CIDRs that bypass rate limiting
   blacklist:     null,       // string[] — IPs/CIDRs that always get 403
+  statsInterval: undefined,  // ms interval to emit 'stats' event
 };
 
 /**
@@ -145,6 +146,17 @@ function resolveConfig(userOptions = {}) {
       valid.push(entry.trim());
     }
     base[listName] = valid.length > 0 ? valid : null;
+  }
+
+  // Validate statsInterval
+  if (base.statsInterval !== undefined) {
+    if (typeof base.statsInterval !== 'number' || base.statsInterval <= 0) {
+      console.warn('[NextLimiter] config.statsInterval must be a positive number. Disabling.');
+      base.statsInterval = undefined;
+    } else if (base.statsInterval < 1000) {
+      console.warn('[NextLimiter] config.statsInterval must be at least 1000ms. Clamping to 1000ms.');
+      base.statsInterval = 1000;
+    }
   }
 
   return base;

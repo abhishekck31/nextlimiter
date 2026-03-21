@@ -991,3 +991,191 @@ describe('Prometheus metrics', () => {
   });
 });
 
+// ─── Event Emitter ────────────────────────────────────────────────────────────
+
+describe('Event emitter', () => {
+  test('limiter.on is a function (EventEmitter correctly mixed in)', () => {
+    const limiter = createLimiter();
+    expect(typeof limiter.on).toBe('function');
+    expect(typeof limiter.emit).toBe('function');
+    expect(typeof limiter.once).toBe('function');
+    expect(typeof limiter.off).toBe('function');
+  });
+
+  test('"blocked" and "allowed" events fire with correct keys and results', async () => {
+    const limiter = createLimiter({ max: 1 });
+    const allowedCb = jest.fn();
+    const blockedCb = jest.fn();
+    
+    limiter.on('allowed', allowedCb);
+    limiter.on('blocked', blockedCb);
+
+    await limiter.check('test:key');
+    expect(allowedCb).toHaveBeenCalledTimes(1);
+    expect(blockedCb).not.toHaveBeenCalled();
+    expect(allowedCb.mock.calls[0][0]).toBe('test:key');
+    expect(allowedCb.mock.calls[0][1].allowed).toBe(true);
+
+    await limiter.check('test:key');
+    expect(allowedCb).toHaveBeenCalledTimes(1);
+    expect(blockedCb).toHaveBeenCalledTimes(1);
+    expect(blockedCb.mock.calls[0][0]).toBe('test:key');
+    expect(blockedCb.mock.calls[0][1].allowed).toBe(false);
+  });
+
+  test('"blocked" event does NOT fire for whitelisted IPs, but "whitelisted" fires', async () => {
+    // max must be > 0. We'll set it to 1 and do 2 requests to guarantee it would normally block
+    const limiter = createLimiter({ max: 1, whitelist: ['1.1.1.1'], keyBy: 'ip' });
+    const blockedCb = jest.fn();
+    const whitelistedCb = jest.fn();
+    
+    limiter.on('blocked', blockedCb);
+    limiter.on('whitelisted', whitelistedCb);
+
+    await limiter.check('1.1.1.1');
+    await limiter.check('1.1.1.1'); // Normally blocks here
+    expect(blockedCb).not.toHaveBeenCalled();
+    expect(whitelistedCb).toHaveBeenCalledWith('1.1.1.1');
+  });
+
+  test('"blacklisted" event fires when IP matches blacklist', async () => {
+    const limiter = createLimiter({ blacklist: ['2.2.2.2'] });
+    const blacklistedCb = jest.fn();
+    limiter.on('blacklisted', blacklistedCb);
+
+    await limiter.check('2.2.2.2');
+    expect(blacklistedCb).toHaveBeenCalledWith('2.2.2.2');
+  });
+
+  test('"penalized" event fires once when smart detector first flags a key', async () => {
+    jest.useFakeTimers();
+    const limiter = createLimiter({ 
+      smart: true, 
+      max: 10, 
+      windowMs: 60000,
+      smartThreshold: 1.0,
+      smartPenaltyFactor: 0.5,
+      smartCooldownMs: 10000 
+    });
+    
+    const penalizedCb = jest.fn();
+    limiter.on('penalized', penalizedCb);
+
+    // Blast it to trigger penalty
+    for (let i = 0; i < 15; i++) {
+       await limiter.check('burst-key');
+    }
+
+    // Advance time by enough to slide the observation window (10% of 60s = 6s)
+    jest.advanceTimersByTime(6500);
+
+    // One more check required to slide the window and trigger the penalty processing
+    await limiter.check('burst-key');
+
+    expect(penalizedCb).toHaveBeenCalledTimes(1);
+    const cbArgs = penalizedCb.mock.calls[0];
+    expect(cbArgs[0]).toBe(`${limiter.config.keyPrefix}burst-key`);
+    expect(cbArgs[1].normalLimit).toBe(10);
+    expect(cbArgs[1].reducedLimit).toBe(5);
+    expect(cbArgs[1]).toHaveProperty('detectedAt');
+
+    // Subsequent blasts should not emit penalized again because it's already penalized
+    for (let i = 0; i < 5; i++) {
+       await limiter.check('burst-key');
+    }
+    expect(penalizedCb).toHaveBeenCalledTimes(1);
+    jest.useRealTimers();
+  });
+
+  test('"reset" event fires after limiter.resetKey(key) is called', () => {
+    const limiter = createLimiter();
+    const resetCb = jest.fn();
+    limiter.on('reset', resetCb);
+
+    limiter.resetKey('some-key');
+    expect(resetCb).toHaveBeenCalledWith('some-key');
+  });
+
+  test('"stats" event fires after statsInterval ms', () => {
+    jest.useFakeTimers();
+    const limiter = createLimiter({ statsInterval: 1000 });
+    const statsCb = jest.fn();
+    limiter.on('stats', statsCb);
+
+    jest.advanceTimersByTime(1100);
+    expect(statsCb).toHaveBeenCalledTimes(1);
+    expect(statsCb.mock.calls[0][0]).toHaveProperty('totalRequests');
+
+    jest.advanceTimersByTime(1000);
+    expect(statsCb).toHaveBeenCalledTimes(2);
+
+    limiter.destroy();
+    jest.advanceTimersByTime(1000);
+    expect(statsCb).toHaveBeenCalledTimes(2); // no longer ticking
+    jest.useRealTimers();
+  });
+
+  test('"error" event: default no-op handler prevents unhandled error crash', async () => {
+    const badStore = {
+      get: () => { throw new Error('DB boom'); },
+      set: () => {},
+      increment: () => { throw new Error('DB boom'); }
+    };
+    
+    const limiter = createLimiter({ store: badStore });
+    const errorCb = jest.fn();
+    limiter.on('error', errorCb);
+
+    const mw = limiter.middleware();
+    await mw({ ip: '1.2.3.4', headers: {} }, {}, jest.fn());
+
+    expect(errorCb).toHaveBeenCalled();
+    expect(errorCb.mock.calls[0][0].message).toBe('DB boom');
+  });
+
+  test('limiter.once() fires exactly once then unsubscribes', async () => {
+    const limiter = createLimiter({ max: 10 });
+    const cb = jest.fn();
+    limiter.once('allowed', cb);
+
+    await limiter.check('ok-key');
+    await limiter.check('ok-key');
+
+    expect(cb).toHaveBeenCalledTimes(1);
+  });
+
+  test('limiter.off() correctly removes the listener', async () => {
+    const limiter = createLimiter({ max: 10 });
+    const cb = jest.fn();
+    limiter.on('allowed', cb);
+    
+    await limiter.check('k');
+    expect(cb).toHaveBeenCalledTimes(1);
+
+    limiter.off('allowed', cb);
+    await limiter.check('k');
+    expect(cb).toHaveBeenCalledTimes(1); // Still 1
+  });
+
+  test('multiple listeners on same event all receive the event', async () => {
+    const limiter = createLimiter({ max: 10 });
+    const cb1 = jest.fn();
+    const cb2 = jest.fn();
+    limiter.on('allowed', cb1);
+    limiter.on('allowed', cb2);
+
+    await limiter.check('q');
+    expect(cb1).toHaveBeenCalledTimes(1);
+    expect(cb2).toHaveBeenCalledTimes(1);
+  });
+
+  test('setMaxListeners(50) avoids MaxListenersExceededWarning', () => {
+    const limiter = createLimiter();
+    // This will throw or warn in Node natively if limit is 10 and we add 20
+    for(let i = 0; i < 20; i++) {
+       limiter.on('allowed', () => {});
+    }
+    expect(limiter.getMaxListeners()).toBe(50);
+  });
+});
+

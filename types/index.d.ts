@@ -1,7 +1,7 @@
 // NextLimiter — TypeScript type definitions
 // Compatible with @types/node and @types/express
-
 import { Request, Response, NextFunction } from 'express';
+import { EventEmitter } from 'events';
 
 // ── Store interface ──────────────────────────────────────────────────────────
 
@@ -102,6 +102,9 @@ export interface LimiterOptions {
 
   /** Array of IPs or CIDR ranges to block immediately (403) */
   blacklist?: string[];
+
+  /** ms interval to emit 'stats' event. undefined = disabled. */
+  statsInterval?: number;
 }
 
 // ── Rate limit result ────────────────────────────────────────────────────────
@@ -138,6 +141,14 @@ export interface RateLimitResult {
 }
 
 // ── Analytics ────────────────────────────────────────────────────────────────
+
+export interface PenaltyInfo {
+  key: string;
+  normalLimit: number;
+  reducedLimit: number;
+  cooldownMs: number;
+  detectedAt: string;
+}
 
 export declare class PrometheusFormatter {
   constructor(limiter: Limiter);
@@ -181,7 +192,7 @@ export interface LimiterStats {
 
 // ── Limiter class ────────────────────────────────────────────────────────────
 
-export declare class Limiter {
+export declare class Limiter extends EventEmitter {
   constructor(options?: LimiterOptions);
 
   /** Returns an Express-compatible middleware function */
@@ -205,6 +216,12 @@ export declare class Limiter {
   /** Reset rate limit state for a specific key */
   reset(key: string): Promise<void>;
 
+  /** Reset rate limit state and clear from store immediately */
+  resetKey(key: string): void;
+
+  /** Clean up stores and timers */
+  destroy(): void;
+
   /** Get analytics snapshot */
   getStats(): LimiterStats;
 
@@ -213,6 +230,25 @@ export declare class Limiter {
 
   /** Read-only resolved configuration */
   readonly config: Readonly<Required<LimiterOptions>>;
+
+  // Typed EventEmitter overloads
+  on(event: 'blocked',     listener: (key: string, result: RateLimitResult) => void): this;
+  on(event: 'allowed',     listener: (key: string, result: RateLimitResult) => void): this;
+  on(event: 'penalized',   listener: (key: string, info: PenaltyInfo) => void): this;
+  on(event: 'blacklisted', listener: (ip: string) => void): this;
+  on(event: 'whitelisted', listener: (ip: string) => void): this;
+  on(event: 'reset',       listener: (key: string) => void): this;
+  on(event: 'stats',       listener: (stats: LimiterStats) => void): this;
+  on(event: 'error',       listener: (err: Error) => void): this;
+
+  once(event: 'blocked',     listener: (key: string, result: RateLimitResult) => void): this;
+  once(event: 'allowed',     listener: (key: string, result: RateLimitResult) => void): this;
+  once(event: 'penalized',   listener: (key: string, info: PenaltyInfo) => void): this;
+  once(event: 'blacklisted', listener: (ip: string) => void): this;
+  once(event: 'whitelisted', listener: (ip: string) => void): this;
+  once(event: 'reset',       listener: (key: string) => void): this;
+  once(event: 'stats',       listener: (stats: LimiterStats) => void): this;
+  once(event: 'error',       listener: (err: Error) => void): this;
 }
 
 // ── Factory functions ────────────────────────────────────────────────────────
