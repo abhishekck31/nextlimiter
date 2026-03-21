@@ -1,5 +1,5 @@
 {
-  "name": "nextlimit",
+  "name": "nextlimiter",
   "version": "1.0.1",
   "description": "Production-ready rate limiting for Node.js — sliding window, token bucket, SaaS plans, smart limiting, and built-in analytics.",
   "main": "src/index.js",
@@ -11,7 +11,7 @@
     "LICENSE"
   ],
   "scripts": {
-    "test": "node --experimental-vm-modules node_modules/.bin/jest",
+    "test": "node --experimental-vm-modules node_modules/jest/bin/jest.js",
     "test:watch": "jest --watch",
     "lint": "eslint src/ --ext .js",
     "example": "node examples/express-app.js"
@@ -29,7 +29,7 @@
     "throttle",
     "nodejs"
   ],
-  "author": "",
+  "author": "Abhishek <abhishek.ck3110@gmail.com>",
   "license": "MIT",
   "engines": {
     "node": ">=14.0.0"
@@ -61,10 +61,10 @@
   },
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/yourusername/nextlimiter.git"
+    "url": "git+https://github.com/abhishekck31/nextlimiter.git"
   },
   "bugs": {
-    "url": ""
+    "url": "https://github.com/abhishekck31/nextlimiter/issues"
   },
-  "homepage": "https://github.com/yourusername/nextlimiter#readme"
+  "homepage": "https://github.com/abhishekck31/nextlimiter#readme"
 }

@@ -39,7 +39,10 @@ const filesToRename = [
 
 for (let f of filesToRename) {
   let oldPath = path.join(rootDir, f);
-  let newPath = oldPath.replace('nextlimiter', 'nextlimiter');
+  let dirname = path.dirname(oldPath);
+  let basename = path.basename(oldPath);
+  let newBasename = basename.replace('nexlimit', 'nextlimiter');
+  let newPath = path.join(dirname, newBasename);
   if (fs.existsSync(oldPath)) {
     fs.renameSync(oldPath, newPath);
     console.log(`Renamed file: ${oldPath} -> ${newPath}`);
