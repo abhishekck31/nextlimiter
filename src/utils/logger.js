@@ -16,7 +16,7 @@ const c = {
 /**
  * Create a logger bound to a specific prefix and enabled flag.
  *
- * @param {string}  prefix  - e.g. '[NexLimit]'
+ * @param {string}  prefix  - e.g. '[NextLimiter]'
  * @param {boolean} enabled - logging on/off
  * @returns {{ blocked, allowed, warn, info }}
  */

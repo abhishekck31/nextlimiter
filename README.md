@@ -1,18 +1,18 @@
-# NexLimit
+# NextLimiter
 
 **Production-ready rate limiting for Node.js — simple, smart, and built for real SaaS apps.**
 
-[![npm version](https://badge.fury.io/js/nexlimit.svg)](https://www.npmjs.com/package/nexlimit)
+[![npm version](https://badge.fury.io/js/nextlimiter.svg)](https://www.npmjs.com/package/nextlimiter)
 [![License: MIT](https://img.shields.io/badge/License-MIT-green.svg)](LICENSE)
 [![Tests](https://img.shields.io/badge/tests-38%20passing-brightgreen)]()
 
 ---
 
-## Why NexLimit?
+## Why NextLimiter?
 
-Most rate limiting libraries make you choose between simple-but-limited and powerful-but-complex. NexLimit does both.
+Most rate limiting libraries make you choose between simple-but-limited and powerful-but-complex. NextLimiter does both.
 
-| Feature | express-rate-limit | rate-limiter-flexible | **NexLimit** |
+| Feature | express-rate-limit | rate-limiter-flexible | **NextLimiter** |
 |---|---|---|---|
 | Zero-config usage | ✓ | ✗ | ✓ |
 | SaaS plan tiers | ✗ | ✗ | **✓** |
@@ -28,7 +28,7 @@ Most rate limiting libraries make you choose between simple-but-limited and powe
 ## Installation
 
 ```bash
-npm install nexlimit
+npm install nextlimiter
 ```
 
 No Redis required. Works out of the box with in-memory storage.
@@ -40,7 +40,7 @@ No Redis required. Works out of the box with in-memory storage.
 ### Zero-config (one line)
 
 ```js
-const { autoLimit } = require('nexlimit');
+const { autoLimit } = require('nextlimiter');
 app.use(autoLimit());
 // → 100 requests/min per IP, sliding window, no setup needed
 ```
@@ -48,7 +48,7 @@ app.use(autoLimit());
 ### Custom configuration
 
 ```js
-const { createLimiter } = require('nexlimit');
+const { createLimiter } = require('nextlimiter');
 
 const limiter = createLimiter({
   windowMs: 60_000,   // 1 minute
@@ -96,7 +96,7 @@ createLimiter({ strategy: 'fixed-window', windowMs: 60_000, max: 100 })
 Apply different rate limits based on subscription tier without writing conditional logic:
 
 ```js
-const { createPlanLimiter } = require('nexlimit');
+const { createPlanLimiter } = require('nextlimiter');
 
 // Built-in plans: free (60/min), pro (600/min), enterprise (6000/min)
 const limiter = createPlanLimiter('pro', {
@@ -167,7 +167,7 @@ const limiter = createLimiter({
 Four built-in presets for the most common scenarios:
 
 ```js
-const { createPresetLimiter } = require('nexlimit');
+const { createPresetLimiter } = require('nextlimiter');
 
 // Strict — 30 req/min, sliding window, smart limiting on
 app.use('/admin', createPresetLimiter('strict').middleware());
@@ -198,11 +198,11 @@ console.log(stats);
 //   allowedRequests: 15186,
 //   blockRate:       0.0152,
 //   topKeys: [
-//     { key: 'nexlimit:ip:1.2.3.4', count: 892 },
-//     { key: 'nexlimit:ip:5.6.7.8', count: 441 },
+//     { key: 'nextlimiter:ip:1.2.3.4', count: 892 },
+//     { key: 'nextlimiter:ip:5.6.7.8', count: 441 },
 //   ],
 //   topBlocked: [
-//     { key: 'nexlimit:ip:1.2.3.4', count: 78 },
+//     { key: 'nextlimiter:ip:1.2.3.4', count: 78 },
 //   ],
 //   trackedSince: '2024-01-15T10:00:00.000Z',
 //   uptimeMs: 3600000,
@@ -334,7 +334,7 @@ createLimiter({
 | `max` | `number` | `100` | Max requests per window |
 | `strategy` | `string` | `'sliding-window'` | `'fixed-window'` \| `'sliding-window'` \| `'token-bucket'` |
 | `keyBy` | `string\|fn` | `'ip'` | `'ip'` \| `'user-id'` \| `'api-key'` \| `(req) => string` |
-| `keyPrefix` | `string` | `'nexlimit:'` | Redis/store key prefix |
+| `keyPrefix` | `string` | `'nextlimiter:'` | Redis/store key prefix |
 | `plan` | `string` | `null` | `'free'` \| `'pro'` \| `'enterprise'` |
 | `plans` | `object` | built-in | Custom plan definitions |
 | `preset` | `string` | `null` | `'strict'` \| `'relaxed'` \| `'api'` \| `'auth'` |
@@ -343,7 +343,7 @@ createLimiter({
 | `smartCooldownMs` | `number` | `60000` | How long smart penalty lasts |
 | `smartPenaltyFactor` | `number` | `0.5` | Limit multiplier during penalty (0–1) |
 | `logging` | `boolean` | `false` | Enable console logging |
-| `logPrefix` | `string` | `'[NexLimit]'` | Log line prefix |
+| `logPrefix` | `string` | `'[NextLimiter]'` | Log line prefix |
 | `headers` | `boolean` | `true` | Send `X-RateLimit-*` headers |
 | `statusCode` | `number` | `429` | HTTP status for blocked requests |
 | `message` | `string` | `'Too many requests...'` | Default 429 message |
@@ -415,10 +415,10 @@ const limiter = createLimiter({
 
 ## TypeScript
 
-Full TypeScript support included — no `@types/nexlimit` needed:
+Full TypeScript support included — no `@types/nextlimiter` needed:
 
 ```ts
-import { createLimiter, LimiterOptions, RateLimitResult, Store } from 'nexlimit';
+import { createLimiter, LimiterOptions, RateLimitResult, Store } from 'nextlimiter';
 
 const options: LimiterOptions = {
   windowMs: 60_000,

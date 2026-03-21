@@ -12,8 +12,8 @@ const { RateLimitResult } = require('../core/result');
  * Redis key format: `<prefix><key>:<windowStart>`
  * The window timestamp in the key means entries auto-expire naturally.
  *
- * @param {string} key         - Rate limit key (e.g. "nexlimit:ip:1.2.3.4")
- * @param {object} config      - Resolved NexLimit config
+ * @param {string} key         - Rate limit key (e.g. "nextlimiter:ip:1.2.3.4")
+ * @param {object} config      - Resolved NextLimiter config
  * @param {object} store       - Store instance
  * @returns {RateLimitResult}
  */

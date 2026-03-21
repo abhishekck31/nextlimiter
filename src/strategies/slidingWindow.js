@@ -23,7 +23,7 @@ const { RateLimitResult } = require('../core/result');
  * accurate. The approximation error is at most 1/(2 × windowMs).
  *
  * @param {string} key         - Rate limit key
- * @param {object} config      - Resolved NexLimit config
+ * @param {object} config      - Resolved NextLimiter config
  * @param {object} store       - Store instance
  * @returns {RateLimitResult}
  */

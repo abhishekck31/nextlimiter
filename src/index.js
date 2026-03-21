@@ -81,7 +81,7 @@ function createPlanLimiter(planName, options = {}) {
 function createPresetLimiter(presetName, options = {}) {
   if (!PRESETS[presetName]) {
     throw new Error(
-      `[NexLimit] Unknown preset "${presetName}". Available: ${Object.keys(PRESETS).join(', ')}`
+      `[NextLimiter] Unknown preset "${presetName}". Available: ${Object.keys(PRESETS).join(', ')}`
     );
   }
   return new Limiter({ ...options, preset: presetName });

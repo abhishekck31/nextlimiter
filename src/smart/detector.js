@@ -17,7 +17,7 @@
  */
 class SmartDetector {
   /**
-   * @param {object} config - Resolved NexLimit config
+   * @param {object} config - Resolved NextLimiter config
    */
   constructor(config) {
     this._config = config;

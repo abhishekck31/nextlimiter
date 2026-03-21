@@ -1,7 +1,7 @@
 'use strict';
 
 /**
- * NexLimit — Complete Express Example
+ * NextLimiter — Complete Express Example
  *
  * Demonstrates every feature of the library:
  *   - autoLimit()           Zero-config global middleware
@@ -199,7 +199,7 @@ app.get('/health', (req, res) => res.json({ status: 'ok', timestamp: new Date().
 // ── Start server ──────────────────────────────────────────────────────────────
 const PORT = process.env.PORT || 3000;
 app.listen(PORT, () => {
-  console.log(`\n  NexLimit example server running on http://localhost:${PORT}\n`);
+  console.log(`\n  NextLimiter example server running on http://localhost:${PORT}\n`);
   console.log('  Try these endpoints:');
   console.log('    GET  /api/v1/free          — free tier (60 req/min)');
   console.log('    GET  /api/v1/pro           — pro tier (600 req/min)');

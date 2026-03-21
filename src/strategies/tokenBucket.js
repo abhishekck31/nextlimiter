@@ -19,7 +19,7 @@ const { RateLimitResult } = require('../core/result');
  * occasional bursts are explicitly allowed.
  *
  * @param {string} key      - Rate limit key
- * @param {object} config   - Resolved NexLimit config
+ * @param {object} config   - Resolved NextLimiter config
  * @param {object} store    - Store instance
  * @returns {RateLimitResult}
  */

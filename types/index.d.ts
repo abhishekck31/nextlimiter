@@ -1,4 +1,4 @@
-// NexLimit — TypeScript type definitions
+// NextLimiter — TypeScript type definitions
 // Compatible with @types/node and @types/express
 
 import { Request, Response, NextFunction } from 'express';
@@ -43,7 +43,7 @@ export interface LimiterOptions {
   /** How to generate the rate limit key. Default: 'ip' */
   keyBy?: KeyBy | ((req: Request) => string);
 
-  /** Redis key prefix. Default: 'nexlimit:' */
+  /** Redis key prefix. Default: 'nextlimiter:' */
   keyPrefix?: string;
 
   /** SaaS plan name — overrides windowMs and max */
@@ -70,7 +70,7 @@ export interface LimiterOptions {
   /** Enable request logging. Default: false */
   logging?: boolean;
 
-  /** Log prefix string. Default: '[NexLimit]' */
+  /** Log prefix string. Default: '[NextLimiter]' */
   logPrefix?: string;
 
   /** Send X-RateLimit-* headers. Default: true */

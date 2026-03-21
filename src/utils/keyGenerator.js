@@ -87,7 +87,7 @@ function resolveKeyGenerator(keyBy) {
     case 'api-key': return getApiKey;
     default:
       throw new Error(
-        `[NexLimit] Unknown keyBy value: "${keyBy}". Use 'ip', 'user-id', 'api-key', or a custom function.`
+        `[NextLimiter] Unknown keyBy value: "${keyBy}". Use 'ip', 'user-id', 'api-key', or a custom function.`
       );
   }
 }

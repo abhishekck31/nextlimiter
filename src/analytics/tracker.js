@@ -28,7 +28,7 @@ class AnalyticsTracker {
 
   /**
    * Record a single request outcome.
-   * @param {string}  key     - Rate limit key (e.g. "nexlimit:ip:1.2.3.4")
+   * @param {string}  key     - Rate limit key (e.g. "nextlimiter:ip:1.2.3.4")
    * @param {boolean} allowed - Whether the request was allowed
    */
   record(key, allowed) {

@@ -68,7 +68,7 @@ const DEFAULT_CONFIG = {
   max: 100,
   strategy: 'sliding-window',
   keyBy: 'ip',
-  keyPrefix: 'nexlimit:',
+  keyPrefix: 'nextlimiter:',
   message: 'Too many requests, please try again later.',
   statusCode: 429,
   headers: true,
@@ -77,7 +77,7 @@ const DEFAULT_CONFIG = {
   smartCooldownMs: 60_000, // how long smart penalty lasts
   smartPenaltyFactor: 0.5, // reduce limit to 50% for suspicious keys
   logging: false,
-  logPrefix: '[NexLimit]',
+  logPrefix: '[NextLimiter]',
   skip: null,               // (req) => bool — skip rate limiting
   onLimitReached: null,     // (req, res, info) => void
   store: null,              // custom store instance
@@ -109,7 +109,7 @@ function resolveConfig(userOptions = {}) {
     const planCfg = planDefs[base.plan];
     if (!planCfg) {
       throw new Error(
-        `[NexLimit] Unknown plan "${base.plan}". Available: ${Object.keys(planDefs).join(', ')}`
+        `[NextLimiter] Unknown plan "${base.plan}". Available: ${Object.keys(planDefs).join(', ')}`
       );
     }
     base.windowMs = planCfg.windowMs;
@@ -118,8 +118,8 @@ function resolveConfig(userOptions = {}) {
   }
 
   // Validate
-  if (base.max <= 0) throw new Error('[NexLimit] config.max must be greater than 0');
-  if (base.windowMs <= 0) throw new Error('[NexLimit] config.windowMs must be greater than 0');
+  if (base.max <= 0) throw new Error('[NextLimiter] config.max must be greater than 0');
+  if (base.windowMs <= 0) throw new Error('[NextLimiter] config.windowMs must be greater than 0');
 
   return base;
 }

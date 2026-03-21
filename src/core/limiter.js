@@ -18,7 +18,7 @@ const STRATEGY_MAP = {
 };
 
 /**
- * NexLimit — the main Limiter class.
+ * NextLimiter — the main Limiter class.
  *
  * Instantiate via `createLimiter(options)` or `autoLimit()`.
  * Do not call `new Limiter()` directly in application code.
@@ -32,7 +32,7 @@ const STRATEGY_MAP = {
  */
 class Limiter {
   /**
-   * @param {object} options - NexLimit configuration (see config.js for defaults)
+   * @param {object} options - NextLimiter configuration (see config.js for defaults)
    */
   constructor(options = {}) {
     this._config = resolveConfig(options);
@@ -44,7 +44,7 @@ class Limiter {
     const strategyFn = STRATEGY_MAP[this._config.strategy];
     if (!strategyFn) {
       throw new Error(
-        `[NexLimit] Unknown strategy "${this._config.strategy}". ` +
+        `[NextLimiter] Unknown strategy "${this._config.strategy}". ` +
         `Valid options: ${Object.keys(STRATEGY_MAP).join(', ')}`
       );
     }

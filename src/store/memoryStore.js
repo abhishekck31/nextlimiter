@@ -6,7 +6,7 @@
  * Uses a plain Map with periodic cleanup of expired entries.
  * For multi-process / distributed deployments, swap this for RedisStore.
  *
- * Implements the NexLimit Store interface:
+ * Implements the NextLimiter Store interface:
  *   get(key)          → value | undefined
  *   set(key, value, ttlMs)
  *   increment(key, ttlMs) → number  (atomic increment, returns new value)
