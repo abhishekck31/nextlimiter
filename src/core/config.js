@@ -97,6 +97,9 @@ const DEFAULT_CONFIG = {
   webhookBackoff:    'exponential',
   webhookTimeout:    5000,
   webhookSecret:     null,
+
+  drainRateMs:       undefined,  // leaky-bucket only
+  capacity:          undefined,  // leaky-bucket only
 };
 
 /**
@@ -232,6 +235,24 @@ function resolveConfig(userOptions = {}) {
     }
     if (base.webhookRetries < 0 || base.webhookRetries > 10) base.webhookRetries = 3;
     if (base.webhookTimeout < 500) base.webhookTimeout = 5000;
+  }
+
+  // Validate new strategies
+  if (base.strategy === 'sliding-window-log' && base.max > 10000) {
+    console.warn('[NextLimiter] Warning: "sliding-window-log" stores an array of timestamps. Using max > 10000 may impact memory and performance.');
+  }
+
+  if (base.drainRateMs !== undefined || base.capacity !== undefined) {
+    if (base.strategy !== 'leaky-bucket') {
+      console.warn('[NextLimiter] Warning: drainRateMs and capacity are ignored for strategy "' + base.strategy + '"');
+    } else {
+      if (base.drainRateMs !== undefined && (typeof base.drainRateMs !== 'number' || base.drainRateMs <= 0)) {
+        throw new Error('[NextLimiter] drainRateMs must be a positive number');
+      }
+      if (base.capacity !== undefined && (typeof base.capacity !== 'number' || base.capacity <= 0 || !Number.isInteger(base.capacity))) {
+        throw new Error('[NextLimiter] capacity must be a positive integer');
+      }
+    }
   }
 
   return base;

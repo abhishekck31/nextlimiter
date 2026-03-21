@@ -3,11 +3,15 @@ const { resolveKeyGenerator } = require('../utils/keyGenerator');
 const { fixedWindowCheck } = require('../strategies/fixedWindow');
 const { slidingWindowCheck } = require('../strategies/slidingWindow');
 const { tokenBucketCheck } = require('../strategies/tokenBucket');
+const { slidingWindowLog } = require('../strategies/slidingWindowLog');
+const { leakyBucket } = require('../strategies/leakyBucket');
 
 const STRATEGY_MAP = {
   'fixed-window': fixedWindowCheck,
   'sliding-window': slidingWindowCheck,
   'token-bucket': tokenBucketCheck,
+  'sliding-window-log': slidingWindowLog,
+  'leaky-bucket': leakyBucket,
 };
 
 class RuleEngine {

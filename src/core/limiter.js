@@ -6,6 +6,8 @@ const { MemoryStore }             = require('../store/memoryStore');
 const { fixedWindowCheck }        = require('../strategies/fixedWindow');
 const { slidingWindowCheck }      = require('../strategies/slidingWindow');
 const { tokenBucketCheck }        = require('../strategies/tokenBucket');
+const { slidingWindowLog }        = require('../strategies/slidingWindowLog');
+const { leakyBucket }             = require('../strategies/leakyBucket');
 const { resolveKeyGenerator }     = require('../utils/keyGenerator');
 const { extractIp }               = require('../utils/keyGenerator');
 const { createLogger }            = require('../utils/logger');
@@ -17,11 +19,14 @@ const { PrometheusFormatter }     = require('../analytics/prometheus');
 const { RuleEngine }              = require('./ruleEngine');
 const { WebhookSender }           = require('../webhook/sender');
 const { Scheduler }               = require('./scheduler');
+const { dashboardMiddleware }     = require('../dashboard/dashboardMiddleware');
 
 const STRATEGY_MAP = {
   'fixed-window':   fixedWindowCheck,
   'sliding-window': slidingWindowCheck,
   'token-bucket':   tokenBucketCheck,
+  'sliding-window-log': slidingWindowLog,
+  'leaky-bucket':   leakyBucket,
 };
 
 /**
@@ -329,6 +334,19 @@ class Limiter extends EventEmitter {
     await this._store.delete(fullKey);
     if (this._smart) this._smart.reset();
     this._log.info(`Reset key: ${fullKey}`);
+  }
+
+  /**
+   * Returns an Express middleware for displaying a live dashboard.
+   *
+   * @param {object} options
+   * @param {string} options.password - If set, enable HTTP Basic Auth
+   * @param {number} options.refreshMs - SSE push interval (default 2000ms)
+   * @param {string} options.path - Mount path prefix (default '/nextlimiter')
+   * @returns {function}
+   */
+  dashboardMiddleware(options = {}) {
+    return dashboardMiddleware(this, options);
   }
 
   /**

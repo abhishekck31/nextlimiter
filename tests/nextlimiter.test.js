@@ -1346,3 +1346,74 @@ describe('Time-Based Schedules', () => {
       .toThrow('cannot be less than start hour');
   });
 });
+
+// ─── Sliding Window Log Strategy ─────────────────────────────────────────────
+
+describe('sliding-window-log', () => {
+  beforeEach(() => {
+    jest.useFakeTimers();
+  });
+  afterEach(() => {
+    jest.useRealTimers();
+  });
+
+  test('Allows exactly max requests in a window and blocks request max+1', async () => {
+    const limiter = createLimiter({ max: 2, windowMs: 1000, strategy: 'sliding-window-log' });
+    jest.setSystemTime(new Date('2024-01-01T12:00:00.000Z'));
+    
+    let res = await limiter.check('ip');
+    expect(res.allowed).toBe(true);
+    expect(res.remaining).toBe(1);
+    
+    res = await limiter.check('ip');
+    expect(res.allowed).toBe(true);
+    expect(res.remaining).toBe(0);
+
+    // Blocked
+    res = await limiter.check('ip');
+    expect(res.allowed).toBe(false);
+    expect(res.retryAfter).toBe(1); // 1000ms until oldest expires
+    
+    jest.advanceTimersByTime(1001); // advance 1001ms to let timestamps expire
+    res = await limiter.check('ip');
+    expect(res.allowed).toBe(true);
+  });
+});
+
+// ─── Leaky Bucket Strategy ───────────────────────────────────────────────────
+
+describe('leaky-bucket', () => {
+  beforeEach(() => {
+    jest.useFakeTimers();
+  });
+  afterEach(() => {
+    jest.useRealTimers();
+  });
+
+  test('Allows requests up to capacity, queues overflow and drops max+1', async () => {
+    const limiter = createLimiter({ max: 5, windowMs: 5000, strategy: 'leaky-bucket' });
+    // capacity defaults to 5, drainRateMs defaults to 5000 / 5 = 1000ms
+    jest.setSystemTime(new Date('2024-01-01T12:00:00.000Z'));
+    
+    for (let i = 0; i < 5; i++) {
+        let res = await limiter.check('req');
+        expect(res.allowed).toBe(true);
+    }
+    
+    let res = await limiter.check('req');
+    expect(res.allowed).toBe(false);
+    expect(res.retryAfter).toBe(1); // 1000ms until first token is drained
+    
+    jest.advanceTimersByTime(2000); // 2000ms -> drains 2
+    res = await limiter.check('req');
+    expect(res.allowed).toBe(true);
+    expect(res.remaining).toBe(1);
+    
+    res = await limiter.check('req');
+    expect(res.allowed).toBe(true);
+    expect(res.remaining).toBe(0);
+    
+    res = await limiter.check('req');
+    expect(res.allowed).toBe(false); 
+  });
+});

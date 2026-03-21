@@ -27,7 +27,7 @@ export interface RuleConfig {
   keyBy: 'ip' | 'api-key' | 'user-id' | string | ((req: Request) => string);
   max: number;
   windowMs: number;
-  strategy?: 'sliding-window' | 'token-bucket' | 'fixed-window';
+  strategy?: 'sliding-window' | 'token-bucket' | 'fixed-window' | 'sliding-window-log' | 'leaky-bucket';
   name?: string;
 }
 
@@ -58,9 +58,15 @@ export interface WebhookPayload {
   ruleName?: string;
 }
 
+export interface DashboardOptions {
+  password?: string;
+  refreshMs?: number;
+  path?: string;
+}
+
 export type BuiltInPlan = 'free' | 'pro' | 'enterprise';
 export type BuiltInPreset = 'strict' | 'relaxed' | 'api' | 'auth';
-export type Strategy = 'fixed-window' | 'sliding-window' | 'token-bucket';
+export type Strategy = 'fixed-window' | 'sliding-window' | 'token-bucket' | 'sliding-window-log' | 'leaky-bucket';
 export type KeyBy = 'ip' | 'user-id' | 'api-key';
 
 // ── Configuration ────────────────────────────────────────────────────────────
@@ -137,6 +143,12 @@ export interface LimiterOptions {
 
   /** Array of IPs or CIDR ranges to block immediately (403) */
   blacklist?: string[];
+
+  /** Leaky bucket only: ms per request drain rate (default: windowMs / max) */
+  drainRateMs?: number;
+
+  /** Leaky bucket only: max queue size (default: max) */
+  capacity?: number;
 
   /** ms interval to emit 'stats' event. undefined = disabled. */
   statsInterval?: number;
@@ -262,8 +274,15 @@ export declare class Limiter extends EventEmitter {
   /** Reset rate limit state and clear from store immediately */
   resetKey(key: string): void;
 
-  /** Clean up stores and timers */
+  /**
+   * Destroys all internal timers appropriately gracefully.
+   */
   destroy(): void;
+
+  /**
+   * Returns an Express middleware that provides a live tracking dashboard.
+   */
+  dashboardMiddleware(options?: DashboardOptions): RequestHandler;
 
   /** Get analytics snapshot */
   getStats(): LimiterStats;

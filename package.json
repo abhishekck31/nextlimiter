@@ -1,6 +1,6 @@
 {
   "name": "nextlimiter",
-  "version": "1.2.0",
+  "version": "1.3.0",
   "description": "Production-ready rate limiting for Node.js — sliding window, token bucket, SaaS plans, smart limiting, and built-in analytics.",
   "main": "src/index.js",
   "types": "types/index.d.ts",
@@ -10,7 +10,11 @@
     "./next": "./src/adapters/next.js",
     "./hono": "./src/adapters/hono.js"
   },
+  "bin": {
+    "nextlimiter": "./bin/nextlimiter.js"
+  },
   "files": [
+    "bin/",
     "src/",
     "types/",
     "README.md",
