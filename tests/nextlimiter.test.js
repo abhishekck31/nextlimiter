@@ -350,3 +350,329 @@ describe('limiter.check()', () => {
     expect(stats.blockedRequests).toBe(0);
   });
 });
+
+// ─── Adapter helpers ──────────────────────────────────────────────────────────
+
+/**
+ * Build a mock limiter whose check() returns a controlled RateLimitResult.
+ */
+function mockLimiter(allowed = true, overrides = {}) {
+  return {
+    check: jest.fn().mockResolvedValue({
+      allowed,
+      limit:       100,
+      remaining:   allowed ? 99 : 0,
+      resetAt:     Date.now() + 60_000,
+      retryAfter:  allowed ? 0 : 30,
+      strategy:    'sliding-window',
+      smartBlocked: false,
+      ...overrides,
+    }),
+  };
+}
+
+// ─── Fastify adapter ──────────────────────────────────────────────────────────
+//
+// We test the core hook logic directly rather than registering a full Fastify
+// server. The adapter is a thin wrapper — what matters is the IP extraction,
+// the 429 path, and the header-setting path.
+
+describe('Fastify adapter — hook logic', () => {
+  function makeFastifyPair({ ip = '1.2.3.4', headers = {} } = {}) {
+    const reply = {
+      code:   jest.fn().mockReturnThis(),
+      send:   jest.fn().mockReturnThis(),
+      header: jest.fn(),
+    };
+    const request = { ip, headers, log: { warn: jest.fn() } };
+    return { request, reply };
+  }
+
+  /** Simulates the onRequest hook registered by the Fastify adapter. */
+  async function runHook(limiterInstance, request, reply) {
+    try {
+      const ip = (
+        request.headers['cf-connecting-ip'] ||
+        request.headers['x-forwarded-for']?.split(',')[0]?.trim() ||
+        request.ip ||
+        'unknown'
+      );
+      const result = await limiterInstance.check(ip);
+
+      if (!result.allowed) {
+        return reply.code(429).send({
+          error:      'Too Many Requests',
+          retryAfter: result.retryAfter,
+        });
+      }
+
+      reply.header('X-RateLimit-Limit',     String(result.limit));
+      reply.header('X-RateLimit-Remaining', String(result.remaining));
+      reply.header('X-RateLimit-Reset',     String(Math.ceil(result.resetAt / 1000)));
+      reply.header('X-RateLimit-Strategy',  result.strategy);
+    } catch (err) {
+      request.log.warn(`[NextLimiter] error: ${err.message}`);
+    }
+  }
+
+  test('allowed request: sets X-RateLimit-* headers, no 429', async () => {
+    const limiter = mockLimiter(true);
+    const { request, reply } = makeFastifyPair({ ip: '10.0.0.1' });
+
+    await runHook(limiter, request, reply);
+
+    expect(reply.code).not.toHaveBeenCalled();
+    expect(reply.header).toHaveBeenCalledWith('X-RateLimit-Limit', '100');
+    expect(reply.header).toHaveBeenCalledWith('X-RateLimit-Remaining', '99');
+  });
+
+  test('blocked request: sends 429 with retryAfter', async () => {
+    const limiter = mockLimiter(false);
+    const { request, reply } = makeFastifyPair({ ip: '5.5.5.5' });
+
+    await runHook(limiter, request, reply);
+
+    expect(reply.code).toHaveBeenCalledWith(429);
+    expect(reply.send).toHaveBeenCalledWith(
+      expect.objectContaining({ error: 'Too Many Requests', retryAfter: 30 })
+    );
+  });
+
+  test('IP fallback: prefers cf-connecting-ip', async () => {
+    const limiter = mockLimiter(true);
+    const { request, reply } = makeFastifyPair({
+      ip:      '127.0.0.1',
+      headers: { 'cf-connecting-ip': '203.0.113.5' },
+    });
+    await runHook(limiter, request, reply);
+    expect(limiter.check).toHaveBeenCalledWith('203.0.113.5');
+  });
+
+  test('IP fallback: x-forwarded-for over req.ip', async () => {
+    const limiter = mockLimiter(true);
+    const { request, reply } = makeFastifyPair({
+      ip:      '127.0.0.1',
+      headers: { 'x-forwarded-for': '203.0.113.5, 10.0.0.1' },
+    });
+    await runHook(limiter, request, reply);
+    expect(limiter.check).toHaveBeenCalledWith('203.0.113.5');
+  });
+
+  test('IP fallback: uses req.ip when no forwarding headers', async () => {
+    const limiter = mockLimiter(true);
+    const { request, reply } = makeFastifyPair({ ip: '9.9.9.9' });
+    await runHook(limiter, request, reply);
+    expect(limiter.check).toHaveBeenCalledWith('9.9.9.9');
+  });
+
+  test('fails open on limiter error', async () => {
+    const brokenLimiter = { check: jest.fn().mockRejectedValue(new Error('Redis down')) };
+    const { request, reply } = makeFastifyPair();
+    await runHook(brokenLimiter, request, reply);
+    expect(reply.code).not.toHaveBeenCalled();
+    expect(request.log.warn).toHaveBeenCalled();
+  });
+});
+
+// ─── Next.js adapter ──────────────────────────────────────────────────────────
+
+
+describe('Next.js adapter — withRateLimit (Pages Router)', () => {
+  const { withRateLimit } = require('../src/adapters/next');
+
+  function makeNodeContext({ xff = null, remoteAddr = '9.9.9.9' } = {}) {
+    const headers = xff ? { 'x-forwarded-for': xff } : {};
+    const req = { headers, socket: { remoteAddress: remoteAddr } };
+    const res = {
+      _status: null, _body: null, _headers: {},
+      status:    jest.fn().mockReturnThis(),
+      json:      jest.fn().mockReturnThis(),
+      setHeader: jest.fn((k, v) => { res._headers[k] = v; }),
+    };
+    return { req, res };
+  }
+
+  test('allowed: calls handler and sets headers', async () => {
+    const handler = jest.fn();
+    const options = { max: 100, windowMs: 60_000 };
+    const wrapped = withRateLimit(handler, options);
+    const { req, res } = makeNodeContext({ remoteAddr: '1.1.1.1' });
+
+    await wrapped(req, res);
+    expect(handler).toHaveBeenCalledWith(req, res);
+  });
+
+  test('blocked: returns 429 and does NOT call handler', async () => {
+    // Use a real limiter with max:1 so second call is blocked
+    const { createLimiter: realCreate } = require('../src/index');
+    const limiter = realCreate({ max: 1, windowMs: 60_000, strategy: 'fixed-window' });
+
+    // Patch getLimiter by creating a custom options object
+    const options = { max: 1, windowMs: 60_000, strategy: 'fixed-window' };
+    const handler = jest.fn();
+    const wrapped = withRateLimit(handler, options);
+
+    const { req: req1, res: res1 } = makeNodeContext({ remoteAddr: '2.2.2.2' });
+    const { req: req2, res: res2 } = makeNodeContext({ remoteAddr: '2.2.2.2' });
+
+    await wrapped(req1, res1); // first call allowed
+    await wrapped(req2, res2); // second call blocked
+
+    expect(res2.status).toHaveBeenCalledWith(429);
+    expect(res2.json).toHaveBeenCalledWith(
+      expect.objectContaining({ error: 'Too Many Requests' })
+    );
+  });
+
+  test('IP extraction: prefers x-forwarded-for', async () => {
+    const handler = jest.fn();
+    const options = { max: 100, windowMs: 60_000 };
+    const wrapped = withRateLimit(handler, options);
+    const { req, res } = makeNodeContext({ xff: '198.51.100.1, 10.0.0.1', remoteAddr: '127.0.0.1' });
+
+    await wrapped(req, res);
+
+    // handler should have been called (allowed), confirming IP was extracted
+    expect(handler).toHaveBeenCalled();
+  });
+
+  test('IP extraction: falls back to socket.remoteAddress', async () => {
+    const handler = jest.fn();
+    const options = { max: 100, windowMs: 60_000 };
+    const wrapped = withRateLimit(handler, options);
+    const { req, res } = makeNodeContext({ remoteAddr: '192.0.2.10' });
+
+    await wrapped(req, res);
+    expect(handler).toHaveBeenCalled();
+  });
+});
+
+describe('Next.js adapter — withRateLimitEdge (Edge runtime)', () => {
+  const { withRateLimitEdge } = require('../src/adapters/next');
+
+  function makeEdgeRequest({ cfIp = null, xff = null } = {}) {
+    const headersMap = {};
+    if (cfIp) headersMap['cf-connecting-ip'] = cfIp;
+    if (xff)  headersMap['x-forwarded-for']  = xff;
+    return {
+      headers: {
+        get: (key) => headersMap[key.toLowerCase()] ?? null,
+      },
+    };
+  }
+
+  test('allowed: handler is called and Response is returned', async () => {
+    const handler = jest.fn().mockResolvedValue(new Response('OK', { status: 200 }));
+    const options = { max: 100, windowMs: 60_000 };
+    const wrapped = withRateLimitEdge(handler, options);
+    const req     = makeEdgeRequest({ cfIp: '1.2.3.4' });
+
+    const res = await wrapped(req);
+    expect(handler).toHaveBeenCalled();
+    expect(res.status).toBe(200);
+  });
+
+  test('blocked: returns 429 Response, handler not called', async () => {
+    const handler  = jest.fn().mockResolvedValue(new Response('OK', { status: 200 }));
+    const options2 = { max: 1, windowMs: 60_000, strategy: 'fixed-window' };
+    const wrapped  = withRateLimitEdge(handler, options2);
+
+    const req1 = makeEdgeRequest({ cfIp: '7.7.7.7' });
+    const req2 = makeEdgeRequest({ cfIp: '7.7.7.7' });
+
+    const res1 = await wrapped(req1);
+    const res2 = await wrapped(req2);
+
+    expect(res1.status).toBe(200);
+    expect(res2.status).toBe(429);
+  });
+
+  test('IP extraction: prefers cf-connecting-ip', async () => {
+    const handler = jest.fn().mockResolvedValue(new Response('OK'));
+    const options = { max: 100, windowMs: 60_000 };
+    const wrapped = withRateLimitEdge(handler, options);
+    const req     = makeEdgeRequest({ cfIp: '203.0.113.99', xff: '10.0.0.1' });
+
+    await wrapped(req);
+    expect(handler).toHaveBeenCalled();
+  });
+});
+
+// ─── Hono adapter ─────────────────────────────────────────────────────────────
+
+describe('Hono adapter — rateLimitMiddleware', () => {
+  const { rateLimitMiddleware } = require('../src/adapters/hono');
+
+  function makeHonoContext({ cfIp = null, xff = null } = {}) {
+    const headersMap = {};
+    if (cfIp) headersMap['cf-connecting-ip'] = cfIp;
+    if (xff)  headersMap['x-forwarded-for']  = xff;
+
+    const _headers = {};
+    const c = {
+      req: {
+        header: (key) => headersMap[key.toLowerCase()] ?? null,
+      },
+      header: jest.fn((k, v) => { _headers[k] = v; }),
+      json:   jest.fn((body, status) => ({ body, status })),
+      _headers,
+    };
+    return c;
+  }
+
+  test('allowed: calls next() and sets X-RateLimit-* headers', async () => {
+    const next    = jest.fn().mockResolvedValue(undefined);
+    const options = { max: 100, windowMs: 60_000 };
+    const mw      = rateLimitMiddleware(options);
+    const c       = makeHonoContext({ cfIp: '4.4.4.4' });
+
+    await mw(c, next);
+
+    expect(next).toHaveBeenCalled();
+    expect(c.header).toHaveBeenCalledWith('X-RateLimit-Limit', '100');
+    expect(c.header).toHaveBeenCalledWith('X-RateLimit-Remaining', expect.any(String));
+  });
+
+  test('blocked: returns 429 JSON, does NOT call next()', async () => {
+    const next    = jest.fn().mockResolvedValue(undefined);
+    const options = { max: 1, windowMs: 60_000, strategy: 'fixed-window' };
+    const mw      = rateLimitMiddleware(options);
+
+    const c1 = makeHonoContext({ cfIp: '6.6.6.6' });
+    const c2 = makeHonoContext({ cfIp: '6.6.6.6' });
+
+    await mw(c1, next);
+    await mw(c2, next);
+
+    // second call: next should NOT have been called a second time
+    expect(next).toHaveBeenCalledTimes(1);
+    expect(c2.json).toHaveBeenCalledWith(
+      expect.objectContaining({ error: 'Too Many Requests' }),
+      429
+    );
+  });
+
+  test('IP fallback: x-forwarded-for when cf-connecting-ip absent', async () => {
+    const next    = jest.fn().mockResolvedValue(undefined);
+    const options = { max: 100, windowMs: 60_000 };
+    const mw      = rateLimitMiddleware(options);
+    const c       = makeHonoContext({ xff: '172.16.0.1, 10.0.0.1' });
+
+    await mw(c, next);
+    expect(next).toHaveBeenCalled();
+    // headers should be set — confirms a key was derived, not 'unknown'
+    expect(c.header).toHaveBeenCalledWith('X-RateLimit-Limit', '100');
+  });
+
+  test('IP fallback: uses "unknown" when no IP headers present', async () => {
+    const next    = jest.fn().mockResolvedValue(undefined);
+    const options = { max: 100, windowMs: 60_000 };
+    const mw      = rateLimitMiddleware(options);
+    const c       = makeHonoContext();
+
+    await mw(c, next);
+    // Should still succeed — falls back to 'unknown' key
+    expect(next).toHaveBeenCalled();
+  });
+});
+

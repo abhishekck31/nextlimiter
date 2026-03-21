@@ -275,3 +275,52 @@ export declare class RedisStore implements Store {
 
 export declare const PRESETS: Record<BuiltInPreset, LimiterOptions>;
 export declare const DEFAULT_PLANS: Record<BuiltInPlan, PlanDefinition>;
+
+// ── Adapters ─────────────────────────────────────────────────────────────────
+//
+// These are available as subpath imports:
+//   import fastifyRateLimit from 'nextlimiter/fastify'
+//   import { withRateLimit, withRateLimitEdge } from 'nextlimiter/next'
+//   import { rateLimitMiddleware } from 'nextlimiter/hono'
+
+// fastify adapter
+declare module 'nextlimiter/fastify' {
+  import { FastifyPluginAsync } from 'fastify';
+  const fastifyRateLimit: FastifyPluginAsync<LimiterOptions>;
+  export default fastifyRateLimit;
+}
+
+// next.js adapter
+declare module 'nextlimiter/next' {
+  import type { NextApiRequest, NextApiResponse } from 'next';
+
+  /**
+   * Wrap a Next.js Pages Router API handler with rate limiting (Node.js runtime).
+   */
+  export function withRateLimit<T extends (req: NextApiRequest, res: NextApiResponse) => any>(
+    handler: T,
+    options?: LimiterOptions
+  ): (req: NextApiRequest, res: NextApiResponse) => Promise<void>;
+
+  /**
+   * Wrap a Next.js App Router / middleware handler with rate limiting (Edge runtime).
+   * Uses Web Request / Response API only — no Node.js built-ins.
+   */
+  export function withRateLimitEdge<T extends (req: Request) => Promise<Response>>(
+    handler: T,
+    options?: LimiterOptions
+  ): (req: Request) => Promise<Response>;
+}
+
+// hono adapter
+declare module 'nextlimiter/hono' {
+  /**
+   * Returns a Hono middleware that applies rate limiting.
+   * Safe for Cloudflare Workers, Bun, Deno — uses Web APIs only.
+   *
+   * @example
+   * app.use('*', rateLimitMiddleware({ max: 100, windowMs: 60_000 }));
+   */
+  export function rateLimitMiddleware(options?: LimiterOptions): (c: any, next: () => Promise<void>) => Promise<void>;
+}
+

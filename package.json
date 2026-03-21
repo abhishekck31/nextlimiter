@@ -1,9 +1,15 @@
 {
   "name": "nextlimiter",
-  "version": "1.0.3",
+  "version": "1.0.4",
   "description": "Production-ready rate limiting for Node.js — sliding window, token bucket, SaaS plans, smart limiting, and built-in analytics.",
   "main": "src/index.js",
   "types": "types/index.d.ts",
+  "exports": {
+    ".": "./src/index.js",
+    "./fastify": "./src/adapters/fastify.js",
+    "./next": "./src/adapters/next.js",
+    "./hono": "./src/adapters/hono.js"
+  },
   "files": [
     "src/",
     "types/",
@@ -36,13 +42,25 @@
   },
   "peerDependencies": {
     "express": ">=4.0.0",
-    "ioredis": ">=4.0.0"
+    "ioredis": ">=4.0.0",
+    "fastify": ">=4.0.0",
+    "fastify-plugin": ">=4.0.0",
+    "hono": ">=3.0.0"
   },
   "peerDependenciesMeta": {
     "express": {
       "optional": true
     },
     "ioredis": {
+      "optional": true
+    },
+    "fastify": {
+      "optional": true
+    },
+    "fastify-plugin": {
+      "optional": true
+    },
+    "hono": {
       "optional": true
     }
   },
