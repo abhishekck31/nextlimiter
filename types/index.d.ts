@@ -240,6 +240,37 @@ export declare class MemoryStore implements Store {
   readonly size: number;
 }
 
+/**
+ * RedisStore — Redis-backed storage backend for NextLimiter.
+ *
+ * Requires ioredis to be installed separately:
+ *   npm install ioredis
+ *
+ * Uses an atomic Lua script for increment — race-condition safe across
+ * multiple Node.js processes behind a load balancer.
+ *
+ * @example
+ * import Redis from 'ioredis';
+ * import { createLimiter, RedisStore } from 'nextlimiter';
+ *
+ * const redis = new Redis();
+ * const limiter = createLimiter({ store: new RedisStore(redis), max: 100 });
+ * app.use('/api', limiter.middleware());
+ */
+export declare class RedisStore implements Store {
+  /**
+   * @param client - A connected ioredis client instance
+   */
+  constructor(client: any);
+  get(key: string): Promise<any>;
+  set(key: string, value: any, ttlMs: number): Promise<void>;
+  /** Atomically increments the counter using a Lua script. */
+  increment(key: string, ttlMs: number): Promise<number>;
+  delete(key: string): Promise<void>;
+  keys(): string[];
+  clear(): void;
+}
+
 // ── Constants ────────────────────────────────────────────────────────────────
 
 export declare const PRESETS: Record<BuiltInPreset, LimiterOptions>;
