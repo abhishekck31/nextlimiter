@@ -348,7 +348,7 @@ function generateDashboardHTML(_options) {
   }
 
   function connectSSE() {
-      es = new EventSource(basePath + '/api/stream');
+      es = new EventSource(basePath + '/api/stream', { withCredentials: true });
       es.onmessage = (e) => {
           if (isPaused) return;
           const stats = JSON.parse(e.data);
