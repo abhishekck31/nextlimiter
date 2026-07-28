@@ -295,8 +295,8 @@ class Limiter extends EventEmitter {
     const result  = await this._runCheck(fullKey);
     this._analytics.record(fullKey, result.allowed);
 
-    if (result.allowed) this.emit('allowed', key, result);
-    else this.emit('blocked', key, result);
+    if (result.allowed) {this.emit('allowed', key, result);}
+    else {this.emit('blocked', key, result);}
 
     return result;
   }
@@ -316,7 +316,7 @@ class Limiter extends EventEmitter {
    * Cleanly dispose of stats cycles and store buffers.
    */
   destroy() {
-    if (this._statsTimer) clearInterval(this._statsTimer);
+    if (this._statsTimer) {clearInterval(this._statsTimer);}
     if (this._store && typeof this._store.destroy === 'function') {
       this._store.destroy();
     }
@@ -332,7 +332,7 @@ class Limiter extends EventEmitter {
   async reset(key) {
     const fullKey = `${this._config.keyPrefix}${key}`;
     await this._store.delete(fullKey);
-    if (this._smart) this._smart.reset();
+    if (this._smart) {this._smart.reset();}
     this._log.info(`Reset key: ${fullKey}`);
   }
 

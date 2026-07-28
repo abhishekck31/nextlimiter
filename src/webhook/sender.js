@@ -33,13 +33,13 @@ class WebhookSender {
   }
 
   _getInitialDelay() {
-    if (this.webhookBackoff === 'linear' || this.webhookBackoff === 'fixed') return 1000;
+    if (this.webhookBackoff === 'linear' || this.webhookBackoff === 'fixed') {return 1000;}
     return 100; // exponential
   }
 
   _getNextDelay(currentDelay) {
-    if (this.webhookBackoff === 'linear') return currentDelay + 1000;
-    if (this.webhookBackoff === 'exponential') return currentDelay * 2;
+    if (this.webhookBackoff === 'linear') {return currentDelay + 1000;}
+    if (this.webhookBackoff === 'exponential') {return currentDelay * 2;}
     return currentDelay; // fixed
   }
 

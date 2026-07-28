@@ -1,6 +1,6 @@
 'use strict';
 
-function generateDashboardHTML(options) {
+function generateDashboardHTML(_options) {
   return `<!DOCTYPE html>
 <html lang="en">
 <head>

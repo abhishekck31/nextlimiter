@@ -114,9 +114,9 @@ function ipMatchesCidr(ip, cidr) {
  * ipMatchesList('1.2.3.4',  [])                              // → false
  */
 function ipMatchesList(ip, list) {
-  if (!list || list.length === 0) return false;
+  if (!list || list.length === 0) {return false;}
   for (const entry of list) {
-    if (ipMatchesCidr(ip, entry)) return true;
+    if (ipMatchesCidr(ip, entry)) {return true;}
   }
   return false;
 }

@@ -65,7 +65,7 @@ class RedisStore {
    */
   async get(key) {
     const raw = await this._client.get(key);
-    if (raw === null || raw === undefined) return undefined;
+    if (raw === null || raw === undefined) {return undefined;}
     try {
       return JSON.parse(raw);
     } catch {

@@ -1,68 +1,52 @@
-# NextLimiter
-
-**Production-ready rate limiting for Node.js — simple, smart, and built for real SaaS apps.**
-
-[![npm version](https://img.shields.io/npm/v/nextlimiter.svg?color=success)](https://www.npmjs.com/package/nextlimiter)
-[![License: MIT](https://img.shields.io/badge/License-MIT-green.svg)](LICENSE)
+<div align="center">
+  <h1>🚀 NextLimiter</h1>
+  <p><strong>Production-ready rate limiting for Node.js — simple, smart, and built for real SaaS apps.</strong></p>
+  
+  [![npm version](https://img.shields.io/npm/v/nextlimiter.svg?style=flat-square)](https://www.npmjs.com/package/nextlimiter)
+  [![License: MIT](https://img.shields.io/badge/License-MIT-green.svg?style=flat-square)](LICENSE)
+  [![Node.js CI](https://github.com/abhishekck31/nexlimiter/actions/workflows/node.js.yml/badge.svg?style=flat-square)](https://github.com/abhishekck31/nexlimiter/actions)
+  [![Coverage Status](https://img.shields.io/coveralls/github/abhishekck31/nexlimiter/main.svg?style=flat-square)](https://coveralls.io/github/abhishekck31/nexlimiter?branch=main)
+</div>
 
 ---
 
-## Why NextLimiter?
+## ✨ Why NextLimiter?
 
-Most rate limiting libraries make you choose between simple-but-limited and powerful-but-complex. NextLimiter brings Enterprise-grade rate limiting directly to your stack with **zero external dependencies**.
+Most rate limiting libraries make you choose between simple-but-limited and powerful-but-complex. NextLimiter brings **Enterprise-grade** rate limiting directly to your stack with **zero external dependencies** required out of the box.
 
-| Feature | express-rate-limit | rate-limiter-flexible | **NextLimiter (v1.3.x)** |
-|---|---|---|---|
-| Zero-config usage | ✓ | ✗ | ✓ |
+| Feature | express-rate-limit | rate-limiter-flexible | **NextLimiter** |
+|---|:---:|:---:|:---:|
+| Zero-config usage | ✓ | ✗ | **✓** |
 | Supported Frameworks | Express | Agnostic | **Express, Fastify, Next.js, Hono** |
 | Algorithms | Fixed | Multiple | **5 algorithms included** |
 | Live Dashboard UI | ✗ | ✗ | **✓** |
 | CLI Load Tester | ✗ | ✗ | **✓** |
 | SaaS plan tiers | ✗ | ✗ | **✓** |
 | Multi-rule Engine | ✗ | ✗ | **✓** |
-| CIDR Allow/Block lists| ✗ | ✗ | **✓** |
 | Webhooks & Events | ✗ | ✗ | **✓** |
-| Time-based Schedules | ✗ | ✗ | **✓** |
-| Prometheus Metrics | ✗ | ✗ | **✓** |
+| Time-based Schedules| ✗ | ✗ | **✓** |
 | Smart Limiting | ✗ | ✗ | **✓** |
-| Redis support | ✗ | ✓ | **✓ (Built-in)** |
+| DDoS Memory Safe | ✗ | ✓ | **✓ (LRU Size Caps)** |
+| Redis support | ✗ | ✓ | **✓ (Atomic Lua INCR)** |
 
 ---
 
-## Installation
+## 📦 Installation
 
 ```bash
 npm install nextlimiter
 ```
 
-No Redis required. Works out of the box with in-memory storage.
-For distributed / multi-server deployments, add Redis: `npm install ioredis`.
+> **Note:** NextLimiter uses an optimized in-memory store by default with active DDoS protection (memory caps). For distributed/multi-server deployments, we recommend adding Redis: `npm install ioredis`.
 
 ---
 
-## The Built-in CLI Tool
+## 🚀 Quick Start
 
-NextLimiter ships with an incredibly powerful built-in CLI tool for load-testing, debugging, and benchmarking rate limits locally or remotely.
-
-```bash
-# 1. Inspect rate limit headers for a single request
-npx nextlimiter inspect https://api.your-app.com/users
-
-# 2. Test specific request limits & concurrency
-npx nextlimiter test https://api.your-app.com --requests 200 --concurrency 5
-
-# 3. Continuous benchmarking & block-rate measurement
-npx nextlimiter benchmark --url http://localhost:3000 --duration 30 --concurrency 10
-```
-
----
-
-## Quick Start (Framework Extensions)
-
-NextLimiter supports major Node.js/Edge frameworks natively out of the box:
+NextLimiter supports major Node.js and Edge frameworks natively.
 
 ### Express
-```js
+```javascript
 const { autoLimit, createLimiter } = require('nextlimiter');
 
 const limiter = createLimiter({ windowMs: 60_000, max: 100 });
@@ -70,7 +54,7 @@ app.use('/api', limiter.middleware());
 ```
 
 ### Fastify
-```js
+```javascript
 const nextlimiterFastify = require('nextlimiter/fastify');
 
 fastify.register(nextlimiterFastify, {
@@ -81,7 +65,7 @@ fastify.register(nextlimiterFastify, {
 ```
 
 ### Next.js (App Router)
-```js
+```javascript
 import { withRateLimit } from 'nextlimiter/next';
 
 export const GET = withRateLimit(
@@ -92,180 +76,92 @@ export const GET = withRateLimit(
 );
 ```
 
-### Hono (Cloudflare Workers, Bun, etc)
-```js
-import { nextlimiterHono } from 'nextlimiter/hono'
-
-app.use('/api/*', nextlimiterHono({ windowMs: 60_000, max: 100 }))
-```
-
 ---
 
-## Live Dashboard UI
+## 🛡️ Top Features
 
-Monitor live stats, tracking volume, and top blocked IPs through a completely self-contained, zero-dependency Dashboard middleware! Features real-time SSE chart rendering.
+### 1. The 5 Algorithms
+Choose your exact tradeoff between accuracy, burst-leniency, and memory.
+1. **`sliding-window` (default)**: Weighted two-window approximation. Accurate & low memory footprint.
+2. **`sliding-window-log`**: Stores a perfect timestamp log for 100% precise sliding-window calculations.
+3. **`token-bucket`**: Refills continuous tokens. Excellent for APIs expecting spike/burst volume.
+4. **`leaky-bucket`**: Constant output rate draining queue. Smooths traffic perfectly.
+5. **`fixed-window`**: Simple request counting per interval.
 
-```js
+### 2. Live Dashboard UI 📈
+Monitor live stats, track volume, and identify top blocked IPs through a completely self-contained, real-time dashboard. Secured against timing-attacks.
+```javascript
 const limiter = createLimiter({ max: 100 });
 
 app.use('/nextlimiter', limiter.dashboardMiddleware({
-  password: 'admin-secret', // Highly recommended for production!
+  password: 'admin-secret', // Securely verified using HMAC & timingSafeEqual
   refreshMs: 2000
 }));
 ```
 
----
+### 3. Built-in CLI Tool 🛠
+Load-test, debug, and benchmark rate limits locally or remotely.
+```bash
+npx nextlimiter benchmark --url http://localhost:3000 --duration 30 --concurrency 10
+```
 
-## The 5 Rate Limiting Algorithms
+### 4. SaaS Plan Tiers 💎
+Map API limits directly to your subscription tiers:
+```javascript
+const { createPlanLimiter } = require('nextlimiter');
 
-NextLimiter ships 5 industry-standard algorithms. Choose your exact tradeoff between accuracy, burst-leniency, and memory.
+// 'free' (60/min), 'pro' (600/min), 'enterprise' (6000/min)
+app.use('/api', createPlanLimiter('pro', { keyBy: 'api-key' }).middleware());
+```
 
-1. **`sliding-window` (default)**
-   Weighted two-window approximation (Nginx approach). Accurate and lowest memory footprint (O(1)).
-2. **`sliding-window-log`** (New in v1.3.0)
-   Stores a perfect timestamp log for identical accuracy as tracking sliding-window-counters (perfect precision). Costs O(N) memory per client.
-3. **`token-bucket`**
-   Refills continuous tokens. Excellent for APIs expecting spike/burst volume up to `max` tokens.
-4. **`leaky-bucket`** (New in v1.3.0)
-   Constant output rate draining queue. If the queue hits `capacity`, further requests drop.
-   `createLimiter({ strategy: 'leaky-bucket', drainRateMs: 500, capacity: 20 })`
-5. **`fixed-window`**
-   Counts simple requests per exact bucket interval. Lowest resource usage, but can be bypassed on boundaries.
-
----
-
-## Advanced Features
-
-### Multiple Rule Engine (Layered Limits)
-Enforce broad infrastructure limits alongside strict targeted path limits:
-```js
+### 5. Multi-Rule Engine ⚙️
+Layer your limits. Enforce broad infrastructure limits alongside strict path-specific limits:
+```javascript
 const { RuleEngine } = require('nextlimiter');
 
 const engine = new RuleEngine();
 engine.addRule('global', { max: 1000, windowMs: 60000 });
-engine.addRule('auth',   { max: 5,    windowMs: 300000,  strategy: 'token-bucket' }, (req) => req.path.startsWith('/login'));
+engine.addRule('auth',   { max: 5, windowMs: 300000, strategy: 'token-bucket' }, (req) => req.path.startsWith('/login'));
 
 app.use(engine.middleware());
 ```
 
-### IP Whitelist, Blacklist & CIDR blocks
-Support explicit IPs or CIDR IPv4 subnets using `whitelist` and `blacklist` arrays.
-```js
-createLimiter({
-  max: 100,
-  whitelist: ['127.0.0.1', '10.0.0.0/8'],
-  blacklist: ['192.168.1.5']
-});
-```
-
-### Webhook Alerts & Slack Integration
-Get pinged instantly when abusers bash your endpoints:
-```js
-createLimiter({
-  max: 100,
-  webhook: {
-    url: 'https://hooks.slack.com/services/T000/B000/XXX',
-    threshold: 150, // Fire if blocked count exceeds 150
-    cooldownMs: 3600_000 // Max 1 ping per hour
-  }
-});
-```
-
-### Event Emitter
-Subscribe to internals to build custom loggers:
-```js
-const limiter = createLimiter({ max: 100 });
-
-limiter.on('blocked', (key, result) => {
-  myDatabase.logAbuse(key, result);
-});
-```
-
-### Prometheus Analytics Endpoint
-Drop-in format generation for Prometheus monitoring systems:
-```js
-const { PrometheusFormatter } = require('nextlimiter');
-
-app.get('/metrics', (req, res) => {
-  const formatter = new PrometheusFormatter(limiter.getStats());
-  res.setHeader('Content-Type', 'text/plain');
-  res.end(formatter.format());
-});
-```
-
-### Rate Limiting Schedules
-Increase or lower your limits during specific busy hours:
-```js
-createLimiter({
-  max: 500, // Standard limit
-  schedules: [
-    {
-      action: 'scale',
-      factor: 0.5,           // Reduce limit to 50% (250) during busy hour
-      from: '18:00',         // 6 PM
-      to: '19:00',           // 7 PM
-      days: [1,2,3,4,5]      // Monday-Friday
-    }
-  ]
-})
-```
-
-### SaaS Plan Limits
-```js
-const { createPlanLimiter } = require('nextlimiter');
-
-// Built-in plans: free (60/min), pro (600/min), enterprise (6000/min)
-app.use('/api', createPlanLimiter('pro', { keyBy: 'api-key' }).middleware());
-```
-
-### Smart Penalty Limiting
-Detect burst traffic cleanly tracking behavior models automatically:
-```js
-createLimiter({
-  smart:              true,
-  smartThreshold:     2.0,    // flag if rate exceeds 2× normal
-  smartPenaltyFactor: 0.5,    // reduce limit to 50% during penalty
-});
-```
-
 ---
 
-## Redis Storage Support
+## 💾 Storage Backends & Security
 
-Included built-in `RedisStore` leveraging atomic Lua `INCR` operations. Never encounter race conditions natively scaling limits synchronously through load balancers:
+### MemoryStore (DDoS Protected)
+The default `MemoryStore` is heavily optimized. It periodically cleans up expired keys and supports a strict **`maxSize`** cap (default: `50,000` keys). Under severe DDoS attacks using randomized IPs, NextLimiter will aggressively evict older/expired entries down to 90% capacity to ensure your Node.js process never crashes from memory exhaustion.
 
-```bash
-npm install ioredis
-```
-
-```js
+### RedisStore (Distributed Scale)
+Ready to scale horizontally? The built-in `RedisStore` leverages atomic Lua `INCR` operations. Never encounter race conditions or split-brain tracking natively across load balancers.
+```javascript
 const Redis = require('ioredis');
 const { createLimiter, RedisStore } = require('nextlimiter');
 
 const redis = new Redis();
-
 const limiter = createLimiter({
   store: new RedisStore(redis),
-  max:   100
+  max: 100
 });
 ```
 
 ---
 
-## Technical Options
+## 🎛 Technical Options
 
-| Setting | Defaults | Notes |
-|---------|----------|-------|
-| `windowMs` | `60000` | Calculation mapping intervals (Ms) |
-| `max` | `100` | Max request hit ceiling allowed per window |
-| `strategy` | `'sliding-window'` | Limits (`fixed-window`, `leaky-bucket`, etc) |
-| `keyBy` | `'ip'` | Determines `key` ('ip' / 'api-key') |
-| `whitelist` | `[]` | Explicit array skipping matching IPs/CIDRs |
-| `blacklist` | `[]` | Explicit array automatically terminating IPs/CIDRs |
-| `webhook` | `{}` | Config map pointing `{ url, threshold }` destinations |
-| `smart` | `false` | Smart penalization booleans active logic checks |
+| Setting | Type | Default | Description |
+|---------|------|---------|-------------|
+| `windowMs` | `number` | `60000` | Calculation mapping intervals in milliseconds. |
+| `max` | `number` | `100` | Max request hit ceiling allowed per window. |
+| `strategy` | `string` | `'sliding-window'`| Algorithm to enforce. |
+| `keyBy` | `string/fn`| `'ip'` | Determines the unique key (`'ip'`, `'api-key'`, or custom function). |
+| `whitelist`| `Array` | `[]` | Explicit array of IPs/CIDRs to skip. |
+| `blacklist`| `Array` | `[]` | Explicit array of IPs/CIDRs to permanently block. |
+| `webhook` | `object` | `{}` | `{ url, threshold }` for Slack/Discord alerts on heavy abuse. |
+| `smart` | `boolean`| `false` | Enable behavior-based anomaly detection & penalization. |
 
 ---
 
-## License
-MIT
+## 📄 License
+MIT © Abhishek

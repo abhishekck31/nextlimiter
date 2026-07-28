@@ -31,7 +31,7 @@ class PrometheusFormatter {
    * Format a single metric block (help, type, and samples).
    */
   _metricBlock(name, help, type, samples) {
-    if (!samples || samples.length === 0) return '';
+    if (!samples || samples.length === 0) {return '';}
     let block = `# HELP ${name} ${help}\n`;
     block += `# TYPE ${name} ${type}\n`;
 
@@ -73,7 +73,7 @@ class PrometheusFormatter {
     // 3. Top blocked IPs (Gauge)
     const topBlockedSamples = (stats.topBlocked || []).slice(0, 10).map((item) => {
       // Clean up IP label
-      let ip = item.key.replace(/^nextlimiter:(ip:)?/, '');
+      const ip = item.key.replace(/^nextlimiter:(ip:)?/, '');
       return { labels: { ip }, value: item.count };
     });
     if (topBlockedSamples.length > 0) {

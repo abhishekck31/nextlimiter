@@ -19,7 +19,7 @@ class RuleEngine {
     this._rules = rules.map((r, i) => {
       const strategyName = r.strategy || 'sliding-window';
       const strategyFn = STRATEGY_MAP[strategyName];
-      if (!strategyFn) throw new Error(`[NextLimiter] Unknown strategy in rule: ${strategyName}`);
+      if (!strategyFn) {throw new Error(`[NextLimiter] Unknown strategy in rule: ${strategyName}`);}
       return {
         ...r,
         name: r.name || `rule${i}`,
@@ -60,7 +60,7 @@ class RuleEngine {
     for (const res of results) {
       if (!res.allowed) {
         allowed = false;
-        if (!failedRule) failedRule = res.rule;
+        if (!failedRule) {failedRule = res.rule;}
       }
       if (res.remaining < mostRestrictiveRemaining) {
         mostRestrictiveRemaining = res.remaining;

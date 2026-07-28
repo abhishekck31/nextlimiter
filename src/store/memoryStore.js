@@ -15,15 +15,23 @@
  *   clear()
  */
 class MemoryStore {
-  constructor() {
+  /**
+   * @param {object} [options]
+   * @param {number} [options.maxSize=50000] - Hard cap on tracked keys. When
+   *   the limit is reached, expired entries are evicted first; if still full,
+   *   the oldest entries (by insertion order) are removed until the store is at
+   *   90 % capacity. This bounds memory under a DDoS with unique source IPs.
+   */
+  constructor(options = {}) {
     /** @type {Map<string, { value: any, expiresAt: number }>} */
     this._data = new Map();
+    this._maxSize = options.maxSize || 50_000;
 
     // Clean up expired entries every 5 minutes to prevent memory leaks
     this._cleanupInterval = setInterval(() => this._cleanup(), 5 * 60_000);
 
     // Don't let this timer prevent process exit
-    if (this._cleanupInterval.unref) this._cleanupInterval.unref();
+    if (this._cleanupInterval.unref) {this._cleanupInterval.unref();}
   }
 
   /**
@@ -32,7 +40,7 @@ class MemoryStore {
    */
   get(key) {
     const entry = this._data.get(key);
-    if (!entry) return undefined;
+    if (!entry) {return undefined;}
     if (Date.now() > entry.expiresAt) {
       this._data.delete(key);
       return undefined;
@@ -47,6 +55,9 @@ class MemoryStore {
    * @param {number} ttlMs - Time to live in milliseconds
    */
   set(key, value, ttlMs) {
+    if (!this._data.has(key) && this._data.size >= this._maxSize) {
+      this._evict();
+    }
     this._data.set(key, {
       value,
       expiresAt: Date.now() + ttlMs,
@@ -65,6 +76,9 @@ class MemoryStore {
     const now = Date.now();
 
     if (!entry || now > entry.expiresAt) {
+      if (!entry && this._data.size >= this._maxSize) {
+        this._evict();
+      }
       this._data.set(key, { value: 1, expiresAt: now + ttlMs });
       return 1;
     }
@@ -89,7 +103,7 @@ class MemoryStore {
     const now = Date.now();
     const result = [];
     for (const [key, entry] of this._data) {
-      if (now <= entry.expiresAt) result.push(key);
+      if (now <= entry.expiresAt) {result.push(key);}
     }
     return result;
   }
@@ -99,11 +113,31 @@ class MemoryStore {
     this._data.clear();
   }
 
+  /**
+   * Evict entries when the store is at capacity. Removes expired entries first;
+   * if still at or above maxSize, removes oldest entries (insertion order) until
+   * the store is at 90 % of maxSize to amortise the cost of repeated evictions.
+   */
+  _evict() {
+    const now = Date.now();
+    for (const [key, entry] of this._data) {
+      if (now > entry.expiresAt) {
+        this._data.delete(key);
+        if (this._data.size < this._maxSize) {return;}
+      }
+    }
+    const target = Math.floor(this._maxSize * 0.9);
+    for (const key of this._data.keys()) {
+      if (this._data.size <= target) {break;}
+      this._data.delete(key);
+    }
+  }
+
   /** Remove expired entries to prevent unbounded memory growth. */
   _cleanup() {
     const now = Date.now();
     for (const [key, entry] of this._data) {
-      if (now > entry.expiresAt) this._data.delete(key);
+      if (now > entry.expiresAt) {this._data.delete(key);}
     }
   }
 

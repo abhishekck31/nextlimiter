@@ -24,13 +24,13 @@ const { ipMatchesList } = require('../utils/cidr');
 function checkAccess(ip, config, emitter) {
   // Blacklist wins — always checked first regardless of whitelist
   if (config.blacklist && ipMatchesList(ip, config.blacklist)) {
-    if (emitter) emitter.emit('blacklisted', ip);
+    if (emitter) {emitter.emit('blacklisted', ip);}
     return { action: 'block', reason: 'blacklisted' };
   }
 
   // Whitelist — bypass all rate limiting
   if (config.whitelist && ipMatchesList(ip, config.whitelist)) {
-    if (emitter) emitter.emit('whitelisted', ip);
+    if (emitter) {emitter.emit('whitelisted', ip);}
     return { action: 'skip', reason: 'whitelisted' };
   }
 

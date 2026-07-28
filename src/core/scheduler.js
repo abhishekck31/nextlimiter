@@ -30,7 +30,7 @@ class Scheduler {
 
   _parseHours(rangeStr) {
     const match = /^\s*(\d{1,2})\s*-\s*(\d{1,2})\s*$/.exec(rangeStr);
-    if (!match) throw new Error(`[NextLimiter] Invalid schedule hours format: "${rangeStr}" (expected "start-end" e.g. "9-17")`);
+    if (!match) {throw new Error(`[NextLimiter] Invalid schedule hours format: "${rangeStr}" (expected "start-end" e.g. "9-17")`);}
     
     const start = parseInt(match[1], 10);
     const end = parseInt(match[2], 10);

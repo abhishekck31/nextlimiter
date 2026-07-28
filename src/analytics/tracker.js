@@ -33,7 +33,7 @@ class AnalyticsTracker {
    */
   record(key, allowed) {
     this._total++;
-    if (!allowed) this._blocked++;
+    if (!allowed) {this._blocked++;}
 
     // Track per-key volume
     this._keyCounts.set(key, (this._keyCounts.get(key) || 0) + 1);
@@ -43,8 +43,8 @@ class AnalyticsTracker {
     }
 
     // Prune maps if they grow too large (keep top 10,000 keys)
-    if (this._keyCounts.size > 10_000) this._pruneMap(this._keyCounts, 5_000);
-    if (this._blockCounts.size > 10_000) this._pruneMap(this._blockCounts, 5_000);
+    if (this._keyCounts.size > 10_000) {this._pruneMap(this._keyCounts, 5_000);}
+    if (this._blockCounts.size > 10_000) {this._pruneMap(this._blockCounts, 5_000);}
   }
 
   /**

@@ -1,6 +1,7 @@
 'use strict';
 
 const { Buffer } = require('buffer');
+const crypto = require('crypto');
 const { generateDashboardHTML } = require('./html');
 
 function dashboardMiddleware(limiter, options = {}) {
@@ -12,9 +13,9 @@ function dashboardMiddleware(limiter, options = {}) {
   
   const historyInterval = setInterval(() => {
     history.push({ timestamp: Date.now(), stats: limiter.getStats() });
-    if (history.length > 60) history.shift();
+    if (history.length > 60) {history.shift();}
   }, refreshMs);
-  if (historyInterval.unref) historyInterval.unref();
+  if (historyInterval.unref) {historyInterval.unref();}
 
   return function(req, res, next) {
     const fullPath = req.originalUrl || req.url || '';
@@ -33,7 +34,12 @@ function dashboardMiddleware(limiter, options = {}) {
       const credentials = Buffer.from(b64, 'base64').toString();
       const matchPos = credentials.indexOf(':');
       const pass = matchPos >= 0 ? credentials.substring(matchPos + 1) : credentials;
-      if (pass !== options.password) {
+      // Hash both sides with HMAC so timingSafeEqual always receives equal-length
+      // buffers regardless of password length, preventing timing and length leaks.
+      const hmacKey = 'nextlimiter-dashboard-auth';
+      const expectedBuf = crypto.createHmac('sha256', hmacKey).update(options.password).digest();
+      const actualBuf   = crypto.createHmac('sha256', hmacKey).update(pass).digest();
+      if (!crypto.timingSafeEqual(expectedBuf, actualBuf)) {
         res.setHeader('WWW-Authenticate', 'Basic realm="nextlimiter dashboard"');
         res.statusCode = 401;
         return res.end('Unauthorized');

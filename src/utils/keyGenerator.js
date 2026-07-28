@@ -71,11 +71,11 @@ function getApiKey(req) {
 
   // X-API-Key custom header
   const headerKey = req.headers['x-api-key'];
-  if (headerKey) return `apikey:${headerKey}`;
+  if (headerKey) {return `apikey:${headerKey}`;}
 
   // Query parameter fallback
   const queryKey = req.query && req.query.apiKey;
-  if (queryKey) return `apikey:${queryKey}`;
+  if (queryKey) {return `apikey:${queryKey}`;}
 
   // Final fallback: IP
   return `ip:${getIP(req)}`;
@@ -88,7 +88,7 @@ function getApiKey(req) {
  * @returns {function}
  */
 function resolveKeyGenerator(keyBy) {
-  if (typeof keyBy === 'function') return keyBy;
+  if (typeof keyBy === 'function') {return keyBy;}
 
   switch (keyBy) {
     case 'ip':      return getIP;

@@ -71,7 +71,7 @@ try {
   fastifyPlugin = require('fastify-plugin');
 } catch {
   // If fastify-plugin is not installed, wrap minimally so the plugin still works
-  fastifyPlugin = (fn, meta) => fn;
+  fastifyPlugin = (fn, _meta) => fn;
 }
 
 module.exports = fastifyPlugin(plugin, {

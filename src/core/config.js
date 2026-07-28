@@ -113,7 +113,7 @@ function resolveConfig(userOptions = {}) {
   // Apply preset
   if (userOptions.preset) { // Use userOptions.preset here to ensure it's applied
     const presetCfg = PRESETS[userOptions.preset];
-    if (!presetCfg) throw new Error(`[NextLimiter] Unknown preset: ${userOptions.preset}`);
+    if (!presetCfg) {throw new Error(`[NextLimiter] Unknown preset: ${userOptions.preset}`);}
     // Merge preset config into base, allowing userOptions to override later
     base = { ...base, ...presetCfg };
   }
@@ -156,9 +156,9 @@ function resolveConfig(userOptions = {}) {
       throw new Error('[NextLimiter] config.rules must be a non-empty array.');
     }
     for (const rule of base.rules) {
-      if (!rule.keyBy) throw new Error('[NextLimiter] Each rule must have a keyBy property.');
-      if (typeof rule.max !== 'number' || rule.max <= 0) throw new Error('[NextLimiter] Each rule must have a positive max integer.');
-      if (typeof rule.windowMs !== 'number' || rule.windowMs <= 0) throw new Error('[NextLimiter] Each rule must have a positive windowMs integer.');
+      if (!rule.keyBy) {throw new Error('[NextLimiter] Each rule must have a keyBy property.');}
+      if (typeof rule.max !== 'number' || rule.max <= 0) {throw new Error('[NextLimiter] Each rule must have a positive max integer.');}
+      if (typeof rule.windowMs !== 'number' || rule.windowMs <= 0) {throw new Error('[NextLimiter] Each rule must have a positive windowMs integer.');}
     }
   } else if (base.schedule) {
     if (!Array.isArray(base.schedule) || base.schedule.length === 0) {
@@ -167,33 +167,33 @@ function resolveConfig(userOptions = {}) {
     let prevEnd = -1;
     for (let i = 0; i < base.schedule.length; i++) {
         const entry = base.schedule[i];
-        if (!entry.hours) throw new Error('[NextLimiter] Each schedule entry must have an hours string (e.g., "9-17").');
-        if (typeof entry.max !== 'number' || entry.max <= 0) throw new Error('[NextLimiter] Each schedule entry must have a positive max integer.');
+        if (!entry.hours) {throw new Error('[NextLimiter] Each schedule entry must have an hours string (e.g., "9-17").');}
+        if (typeof entry.max !== 'number' || entry.max <= 0) {throw new Error('[NextLimiter] Each schedule entry must have a positive max integer.');}
         
         const match = /^\s*(\d{1,2})\s*-\s*(\d{1,2})\s*$/.exec(entry.hours);
-        if (!match) throw new Error(`[NextLimiter] Invalid hours format: ${entry.hours}`);
-        let s = parseInt(match[1], 10), e = parseInt(match[2], 10);
-        if (s < 0 || s > 23 || e < 0 || e > 23) throw new Error('[NextLimiter] Schedule hours must be between 0 and 23. Got: ' + entry.hours);
-        if (e < s) throw new Error(`[NextLimiter] Invalid schedule: end hour (${e}) cannot be less than start hour (${s}).`);
+        if (!match) {throw new Error(`[NextLimiter] Invalid hours format: ${entry.hours}`);}
+        const s = parseInt(match[1], 10), e = parseInt(match[2], 10);
+        if (s < 0 || s > 23 || e < 0 || e > 23) {throw new Error('[NextLimiter] Schedule hours must be between 0 and 23. Got: ' + entry.hours);}
+        if (e < s) {throw new Error(`[NextLimiter] Invalid schedule: end hour (${e}) cannot be less than start hour (${s}).`);}
         
         // Basic overlap check
-        if (s <= prevEnd) console.warn(`[NextLimiter] Warning: Overlapping schedule entries detected.`);
+        if (s <= prevEnd) {console.warn('[NextLimiter] Warning: Overlapping schedule entries detected.');}
         prevEnd = e;
     }
-    if (prevEnd < 23) console.warn(`[NextLimiter] Warning: Schedule entries do not cover a full 24-hr cycle.`);
+    if (prevEnd < 23) {console.warn('[NextLimiter] Warning: Schedule entries do not cover a full 24-hr cycle.');}
     // Base max/windowMs must still be valid for fallback
-    if (base.max <= 0) throw new Error('[NextLimiter] config.max must be greater than 0');
-    if (base.windowMs <= 0) throw new Error('[NextLimiter] config.windowMs must be greater than 0');
+    if (base.max <= 0) {throw new Error('[NextLimiter] config.max must be greater than 0');}
+    if (base.windowMs <= 0) {throw new Error('[NextLimiter] config.windowMs must be greater than 0');}
   } else {
     // Standard mode validation
-    if (base.max <= 0) throw new Error('[NextLimiter] config.max must be greater than 0');
-    if (base.windowMs <= 0) throw new Error('[NextLimiter] config.windowMs must be greater than 0');
+    if (base.max <= 0) {throw new Error('[NextLimiter] config.max must be greater than 0');}
+    if (base.windowMs <= 0) {throw new Error('[NextLimiter] config.windowMs must be greater than 0');}
   }
 
   // Validate whitelist / blacklist (warn, never throw)
   for (const listName of ['whitelist', 'blacklist']) {
     const list = base[listName];
-    if (list == null) continue;
+    if (list === null || list === undefined) {continue;}
     if (!Array.isArray(list)) {
       console.warn(`[NextLimiter] config.${listName} must be an array. Ignoring.`);
       base[listName] = null;
@@ -233,8 +233,8 @@ function resolveConfig(userOptions = {}) {
     if (base.webhook.startsWith('http://')) {
         console.warn('[NextLimiter] Warning: Webhook URL is using insecure http://. Consider switching to https://');
     }
-    if (base.webhookRetries < 0 || base.webhookRetries > 10) base.webhookRetries = 3;
-    if (base.webhookTimeout < 500) base.webhookTimeout = 5000;
+    if (base.webhookRetries < 0 || base.webhookRetries > 10) {base.webhookRetries = 3;}
+    if (base.webhookTimeout < 500) {base.webhookTimeout = 5000;}
   }
 
   // Validate new strategies

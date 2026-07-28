@@ -30,7 +30,7 @@ const { createLimiter } = require('../index');
 const limiterCache = new WeakMap();
 
 function getLimiter(options) {
-  if (limiterCache.has(options)) return limiterCache.get(options);
+  if (limiterCache.has(options)) {return limiterCache.get(options);}
   const limiter = createLimiter(options);
   limiterCache.set(options, limiter);
   return limiter;
