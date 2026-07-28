@@ -4,8 +4,6 @@
   
   [![npm version](https://img.shields.io/npm/v/nextlimiter.svg?style=flat-square)](https://www.npmjs.com/package/nextlimiter)
   [![License: MIT](https://img.shields.io/badge/License-MIT-green.svg?style=flat-square)](LICENSE)
-  [![Node.js CI](https://github.com/abhishekck31/nexlimiter/actions/workflows/node.js.yml/badge.svg?style=flat-square)](https://github.com/abhishekck31/nexlimiter/actions)
-  [![Coverage Status](https://img.shields.io/coveralls/github/abhishekck31/nexlimiter/main.svg?style=flat-square)](https://coveralls.io/github/abhishekck31/nexlimiter?branch=main)
 </div>
 
 ---
